@@ -33,3 +33,7 @@ web/static/emulatorjs/
 *.v64
 !EMULATEURS.md
 emu-*
+
+# Notes locales
+notes.txt
+

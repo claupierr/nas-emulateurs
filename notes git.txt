@@ -1,5 +1,0 @@
-cd /srv/data/server/emulateurs
-git status --short        # relire avant de valider
-git add -A
-git commit -m "Description de la modification"
-git push
