@@ -1,0 +1,372 @@
+/* ------------------------------------------------------------------------- *
+ * Site émulateur du serveur « nas » — styles (Material, thème sombre)
+ * /srv/data/server/emulateurs/web/static/css/app.css
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --fond: #121014;
+  --surface: #1c1a20;
+  --surface-haut: #262430;
+  --surface-contour: #35323e;
+  --texte: #e7e0ec;
+  --texte-faible: #a9a2b3;
+  --accent: #d0bcff;
+  --accent-sombre: #4a3f6b;
+  --sur-accent: #22133f;
+  --rayon-s: 12px;
+  --rayon-m: 20px;
+  --rayon-l: 28px;
+  --ombre-1: 0 1px 3px rgb(0 0 0 / .5);
+  --ombre-2: 0 6px 18px rgb(0 0 0 / .45);
+  --police: "Roboto", "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+/* Les règles « display » ci-dessous l'emportent sur le display:none que le
+   navigateur applique à [hidden] : on rétablit la priorité une fois pour toutes. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0; height: 100%;
+  background: var(--fond); color: var(--texte);
+  font-family: var(--police);
+  font-size: 16px; line-height: 1.5;
+  overscroll-behavior: none;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 500; letter-spacing: .2px; }
+p { margin: 0; }
+.secondaire { color: var(--texte-faible); font-size: .875rem; }
+
+/* ----------------------------------------------------------- barre du haut */
+
+.barre {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 24px;
+  background: color-mix(in srgb, var(--fond) 88%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--surface-contour);
+}
+.barre h1 { font-size: 1.375rem; }
+.barre-fin { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+
+.pastille {
+  font-size: .75rem; color: var(--texte-faible); background: transparent;
+  border: 1px solid var(--surface-contour); border-radius: 999px;
+  padding: 6px 14px; white-space: nowrap; cursor: pointer;
+}
+.pastille:hover, .pastille:focus-visible { background: var(--surface-haut); color: var(--texte); }
+
+#recherche {
+  background: var(--surface); color: var(--texte);
+  border: 1px solid var(--surface-contour); border-radius: 999px;
+  padding: 10px 18px; min-width: 220px; font: inherit; font-size: .9375rem;
+}
+#recherche::placeholder { color: var(--texte-faible); }
+
+/* -------------------------------------------------------------- structure */
+
+.vue { padding: 28px 24px 96px; max-width: 1400px; margin: 0 auto; }
+.aide {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4;
+  padding: 10px 24px; font-size: .8125rem; color: var(--texte-faible);
+  background: color-mix(in srgb, var(--fond) 92%, transparent);
+  border-top: 1px solid var(--surface-contour);
+  display: flex; gap: 20px; flex-wrap: wrap;
+}
+.aide b { color: var(--texte); font-weight: 500; }
+
+.vide {
+  border: 1px dashed var(--surface-contour); border-radius: var(--rayon-m);
+  padding: 32px; text-align: center; color: var(--texte-faible);
+}
+.vide code { color: var(--accent); font-size: .875rem; }
+
+/* ------------------------------------------------------------- accueil */
+
+.consoles {
+  display: grid; gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.carte-console {
+  position: relative; display: block; text-align: left;
+  border: 0; padding: 0; overflow: hidden; cursor: pointer;
+  border-radius: var(--rayon-l);
+  background: var(--surface); color: var(--texte);
+  box-shadow: var(--ombre-1);
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.carte-console:hover, .carte-console:focus-visible { box-shadow: var(--ombre-2); transform: translateY(-2px); }
+.carte-console .art { display: block; width: 100%; aspect-ratio: 16 / 10; }
+.carte-console .legende { padding: 16px 20px 20px; }
+.carte-console .legende h2 { font-size: 1.25rem; }
+.carte-console[data-vide="1"] { opacity: .55; }
+
+/* --------------------------------------------------------------- jeux */
+
+.jeux { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.carte-jeu {
+  display: flex; flex-direction: column; gap: 0; text-align: left;
+  border: 1px solid var(--surface-contour); border-radius: var(--rayon-m);
+  background: var(--surface); color: var(--texte); cursor: pointer;
+  padding: 0; overflow: hidden;
+  transition: border-color .15s ease, background .15s ease;
+}
+.carte-jeu:hover, .carte-jeu:focus-visible { border-color: var(--accent); background: var(--surface-haut); }
+.carte-jeu .miniature {
+  aspect-ratio: 4 / 3; background: #0b0a0d center/cover no-repeat;
+  display: grid; place-items: center; color: var(--accent-sombre);
+  font-size: 2rem; font-weight: 500;
+}
+.carte-jeu .nom { padding: 12px 14px; font-size: .9375rem; line-height: 1.35; }
+.carte-jeu .marque {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 6px;
+  color: var(--accent); font-size: .75rem;
+}
+.carte-jeu .marque svg { width: 14px; height: 14px; fill: currentColor; }
+
+/* ------------------------------------------------------------- boutons */
+
+button { font: inherit; }
+.rempli, .tonal, .texte {
+  border: 0; border-radius: 999px; cursor: pointer;
+  padding: 12px 26px; font-size: .9375rem; font-weight: 500;
+  transition: background .15s ease, filter .15s ease;
+}
+.rempli { background: var(--accent); color: var(--sur-accent); }
+.rempli:hover, .rempli:focus-visible { filter: brightness(1.08); }
+.tonal { background: var(--surface-haut); color: var(--texte); }
+.tonal:hover, .tonal:focus-visible { background: var(--accent-sombre); }
+.texte { background: transparent; color: var(--accent); padding: 12px 18px; }
+.texte:hover, .texte:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+
+.icone {
+  display: grid; place-items: center; width: 44px; height: 44px;
+  border: 0; border-radius: 999px; background: transparent; color: var(--texte); cursor: pointer;
+}
+.icone svg { width: 24px; height: 24px; fill: currentColor; }
+.icone:hover, .icone:focus-visible { background: var(--surface-haut); }
+
+:focus { outline: none; }
+:focus-visible, .pointe {
+  outline: 3px solid var(--accent); outline-offset: 3px;
+}
+
+/* ---------------------------------------------------- emplacements (slots) */
+
+.voile {
+  position: fixed; inset: 0; z-index: 20;
+  display: grid; place-items: center; padding: 24px;
+  background: rgb(0 0 0 / .62);
+}
+.feuille {
+  width: min(760px, 100%); max-height: 88vh; overflow: auto;
+  background: var(--surface); border-radius: var(--rayon-l);
+  padding: 28px; box-shadow: var(--ombre-2);
+}
+.feuille h2 { font-size: 1.375rem; margin-bottom: 4px; }
+.feuille .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+.slots { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 20px; }
+.slot {
+  position: relative; text-align: left; cursor: pointer; overflow: hidden;
+  border: 1px solid var(--surface-contour); border-radius: var(--rayon-m);
+  background: var(--surface-haut); color: var(--texte); padding: 0;
+}
+.slot:hover, .slot:focus-visible { border-color: var(--accent); }
+.slot .apercu {
+  aspect-ratio: 4 / 3; background: #0b0a0d center/cover no-repeat;
+  display: grid; place-items: center; color: var(--texte-faible); font-size: .8125rem;
+}
+.slot .infos { padding: 10px 14px; }
+.slot .infos strong { font-weight: 500; font-size: .9375rem; }
+.slot-effacer {
+  position: absolute; top: 8px; right: 8px; width: 34px; height: 34px;
+  border: 0; border-radius: 999px; cursor: pointer;
+  background: rgb(0 0 0 / .6); color: #ffb4ab; display: grid; place-items: center;
+}
+.slot-effacer svg { width: 18px; height: 18px; fill: currentColor; }
+
+/* ------------------------------------------------------------------ jeu */
+
+#scene { position: fixed; inset: 0; z-index: 10; background: #000; }
+#scene.sans-curseur { cursor: none; }
+#game { width: 100%; height: 100%; }
+
+#surimpression {
+  position: absolute; inset: 0; z-index: 12;
+  display: flex; flex-direction: column;
+  padding: 40px clamp(24px, 6vw, 72px) 96px;   /* 96px : place pour la barre EmulatorJS */
+  background: rgb(0 0 0 / .72);
+  animation: apparait .3s ease-out;
+}
+#surimpression.sortie { animation: disparait .3s ease-in forwards; }
+@keyframes apparait { from { opacity: 0; } to { opacity: 1; } }
+@keyframes disparait { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  #surimpression, #surimpression.sortie { animation: none; }
+  .carte-console { transition: none; }
+}
+.sur-centre {
+  margin: auto; display: flex; flex-direction: column; align-items: center;
+  gap: 10px; text-align: center;
+}
+.sur-centre h2 { font-size: 2rem; }
+/* Bloc d'environ 350 x 350 px : six boutons de 350 x 50, séparés de 8 px. */
+.surimpression-actions {
+  margin-top: 18px; display: flex; flex-direction: column; gap: 8px;
+  width: min(350px, 86vw);
+}
+.grand {
+  width: 100%; height: 50px; padding: 0 24px; font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.quitter { background: #93000a; color: #ffdad6; border: 0; border-radius: 999px; cursor: pointer; font-weight: 500; }
+.quitter:hover, .quitter:focus-visible { background: #b3261e; }
+.surimpression-bas { max-width: 80ch; margin: 0 auto; text-align: center; }
+
+/* Barre d'outils d'EmulatorJS (volume, réglages, plein écran) : visible avec la
+   surimpression, et masquée le reste du temps, y compris en plein écran. */
+#scene.menu .ejs_menu_bar, #scene.menu .ejs_menu_bar_hidden {
+  opacity: 1 !important; pointer-events: auto !important; transform: none !important;
+  z-index: 14 !important;
+}
+#scene:not(.menu) .ejs_menu_bar { opacity: 0 !important; pointer-events: none !important; }
+
+/* L'écran de chargement ne couvre plus toute la scène : les messages et le
+   bouton de démarrage d'EmulatorJS doivent rester visibles en dessous. */
+#chargement {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 11;
+  display: flex; justify-content: center; padding: 20px clamp(16px, 4vw, 40px);
+  background: linear-gradient(to top, rgb(0 0 0 / .94), rgb(0 0 0 / .74));
+  color: var(--texte-faible);
+}
+.charge-boite { display: flex; flex-direction: column; gap: 10px; width: min(900px, 100%); }
+.charge-ligne { display: flex; align-items: center; gap: 12px; color: var(--texte); }
+.charge-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+#chargement-detail { font-family: ui-monospace, monospace; word-break: break-word; }
+.spin {
+  width: 22px; height: 22px; border-radius: 999px;
+  border: 3px solid var(--surface-contour); border-top-color: var(--accent);
+  animation: tourne .9s linear infinite;
+}
+@keyframes tourne { to { transform: rotate(360deg); } }
+
+/* --------------------------------------------------------------- messages */
+
+#messages {
+  position: fixed; left: 50%; bottom: 72px; transform: translateX(-50%);
+  z-index: 30; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none;
+}
+.message {
+  background: var(--surface-haut); color: var(--texte);
+  border-radius: var(--rayon-s); padding: 12px 20px; box-shadow: var(--ombre-2);
+  font-size: .9375rem;
+}
+.message.erreur { background: #5c1a19; color: #ffdad6; }
+
+@media (max-width: 640px) {
+  .vue { padding: 20px 16px 96px; }
+  .barre { padding: 10px 14px; }
+  #recherche { min-width: 130px; }
+  .surimpression-actions { flex-direction: column; align-items: stretch; }
+}
+
+/* ------------------------------------------------------- mappage des touches */
+
+.feuille.etroite { width: min(440px, 100%); }
+.feuille.large { width: min(960px, 100%); }
+
+.entete-console { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+
+.joueurs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.onglet {
+  border: 1px solid var(--surface-contour); border-radius: 999px; cursor: pointer;
+  background: transparent; color: var(--texte); padding: 9px 20px; font-size: .9375rem;
+}
+.onglet[aria-selected="true"] { background: var(--accent); color: var(--sur-accent); border-color: transparent; }
+
+.mappage {
+  border: 1px solid var(--surface-contour); border-radius: var(--rayon-s); overflow: hidden;
+}
+.ligne-map {
+  display: grid; grid-template-columns: 1.1fr 1fr 1fr; align-items: center; gap: 6px;
+  padding: 3px 10px; border-top: 1px solid var(--surface-contour);
+}
+.ligne-map:first-child { border-top: 0; }
+.ligne-map.entetes { background: var(--surface); color: var(--texte-faible); font-size: .75rem; }
+.ligne-map .role { font-size: .8125rem; }
+.cellule {
+  background: var(--surface-haut); color: var(--texte); border: 1px solid transparent;
+  border-radius: 8px; padding: 5px 8px; cursor: pointer; line-height: 1.2;
+  font-size: .8125rem; text-align: center; min-height: 28px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cellule:hover, .cellule:focus-visible { border-color: var(--accent); }
+.cellule.vide { color: var(--texte-faible); }
+.cellule.ecoute { background: var(--accent); color: var(--sur-accent); }
+
+.choix-pad { display: flex; align-items: center; gap: 10px; font-size: .9375rem; color: var(--texte-faible); }
+.choix-pad select {
+  background: var(--surface-haut); color: var(--texte); font: inherit; font-size: .9375rem;
+  border: 1px solid var(--surface-contour); border-radius: var(--rayon-s); padding: 9px 12px;
+}
+
+.ligne-map.raccourci { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.ligne-map.raccourci .role { color: var(--accent); }
+.temoin {
+  font-size: .8125rem; color: var(--texte-faible);
+  border: 1px solid var(--surface-contour); border-radius: 999px; padding: 6px 14px;
+  transition: background .1s ease, color .1s ease;
+}
+.temoin.allume { background: var(--accent); color: var(--sur-accent); border-color: transparent; }
+
+/* ------------------------------------------- bibliothèque : « Autres jeux » */
+
+.liste-compacte {
+  display: grid; gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  border-top: 1px solid var(--surface-contour); padding-top: 10px;
+}
+.ligne-jeu {
+  border: 0; border-radius: var(--rayon-s); background: transparent; color: var(--texte);
+  text-align: left; cursor: pointer; padding: 8px 12px; font-size: .9375rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ligne-jeu:hover, .ligne-jeu:focus-visible { background: var(--surface-haut); }
+.titre-section { margin: 26px 0 10px; font-size: 1.0625rem; font-weight: 500; }
+
+.slot .alerte { color: #ffb4ab; font-size: .8125rem; margin-top: 2px; }
+.slot.incompatible { border-color: var(--accent-sombre); }
+.slot[disabled] { opacity: .55; cursor: not-allowed; }
+
+/* Boutons de la barre EmulatorJS que sa configuration ne permet pas de retirer
+   (« Context Menu », et « Play » que la pause réaffiche en style en ligne). */
+#scene .ejs_menu_button.bouton-masque { display: none !important; }
+
+/* ------------------------------------- mappage : tableau à gauche, manette à droite */
+
+.map-colonnes { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.map-gauche { width: 550px; max-width: 100%; }
+.map-droite { flex: 1 1 280px; display: flex; justify-content: center; }
+.map-droite img {
+  width: 100%; max-height: 62vh; object-fit: contain;
+  border-radius: var(--rayon-m); background: #fff;
+}
+/* En haut de page, les onglets et le choix du périphérique restent compacts. */
+.joueurs { margin-bottom: 10px; }
+.onglet { padding: 6px 16px; font-size: .875rem; }
+.entete-console { margin-bottom: 12px; }
+
+.slot .avis { color: var(--accent); font-size: .8125rem; margin-top: 2px; }
+
+/* Voile de restauration : masque le démarrage du jeu et les deux applications
+   successives de l'état, le temps que l'image soit stable. */
+#voile {
+  position: absolute; inset: 0; z-index: 11;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  background: #000; color: var(--texte-faible); font-size: .9375rem;
+}

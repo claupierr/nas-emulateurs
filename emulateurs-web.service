@@ -1,0 +1,26 @@
+[Unit]
+Description=Site emulateur (consoles retro) sur le port 8097
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/srv/data
+
+[Service]
+Type=simple
+User=pc
+Group=pc
+UMask=0002
+WorkingDirectory=/srv/data/server/emulateurs/web
+EnvironmentFile=-/srv/data/server/emulateurs/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pc/miniconda3/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8097
+Restart=on-failure
+RestartSec=10
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=6
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

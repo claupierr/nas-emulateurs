@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Consoles — nas</title>
+<link rel="stylesheet" href="/static/css/app.css?v={{V}}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23141218'/><rect x='6' y='11' width='20' height='12' rx='5' fill='%23d0bcff'/><rect x='9.5' y='15.5' width='5' height='2' rx='1' fill='%23141218'/><rect x='11' y='14' width='2' height='5' rx='1' fill='%23141218'/><circle cx='21' cy='16.5' r='1.6' fill='%23141218'/></svg>">
+</head>
+<body>
+
+<!-- ------------------------------------------------------------------ menus -->
+<div id="appli">
+  <header class="barre" id="barre">
+    <button class="icone nav" id="retour" hidden aria-label="Retour">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20z"/></svg>
+    </button>
+    <h1 id="titre-barre">Consoles</h1>
+    <div class="barre-fin">
+      <input type="search" id="recherche" class="nav" placeholder="Chercher un jeu" hidden
+             autocomplete="off" spellcheck="false">
+      <button class="pastille nav" id="manettes" title="Chercher les manettes">⟳ manettes</button>
+    </div>
+  </header>
+
+  <main id="vue" class="vue"></main>
+
+  <footer class="aide" id="aide"></footer>
+</div>
+
+<!-- ----------------------------------------------------------- choix de slot -->
+<div class="voile" id="dialogue" hidden>
+  <div class="feuille" role="dialog" aria-modal="true" aria-labelledby="dialogue-titre">
+    <h2 id="dialogue-titre">Emplacement de sauvegarde</h2>
+    <p id="dialogue-aide" class="secondaire"></p>
+    <div class="slots" id="slots"></div>
+    <div class="actions">
+      <button class="texte nav" id="dialogue-annuler">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- -------------------------------------------------------- confirmation -->
+<div class="voile" id="confirmation" hidden>
+  <div class="feuille etroite" role="alertdialog" aria-labelledby="confirmation-titre">
+    <h2 id="confirmation-titre"></h2>
+    <p class="secondaire" id="confirmation-texte"></p>
+    <div class="actions">
+      <button class="texte nav" id="confirmation-non">Annuler</button>
+      <button class="rempli nav" id="confirmation-oui">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- --------------------------------------- mappage par-dessus un jeu en pause -->
+<div class="voile" id="mappage" hidden>
+  <div class="feuille large" role="dialog" aria-modal="true" aria-labelledby="mappage-titre">
+    <h2 id="mappage-titre">Manettes et touches</h2>
+    <p class="secondaire">La partie est en pause. Les réglages s'appliquent dès la fermeture.</p>
+    <div id="mappage-contenu"></div>
+    <div class="actions">
+      <button class="rempli nav" id="mappage-fermer">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------------- jeu -->
+<div id="scene" hidden>
+  <div id="game"></div>
+
+  <div id="voile" hidden><span class="spin"></span><span>Restauration de la sauvegarde…</span></div>
+
+  <div id="surimpression" hidden>
+    <div class="sur-centre">
+      <p class="secondaire" id="sur-console"></p>
+      <h2 id="sur-titre"></h2>
+      <p class="secondaire" id="sur-slot"></p>
+      <div class="surimpression-actions">
+        <button class="grand rempli nav" id="btn-reprendre">Reprendre</button>
+        <button class="grand tonal nav" id="btn-sauver">Sauvegarder</button>
+        <button class="grand tonal nav" id="btn-charger">Charger</button>
+        <button class="grand tonal nav" id="btn-lissage">Activer le lissage</button>
+        <button class="grand tonal nav" id="btn-mappage">Manettes et touches</button>
+        <button class="grand quitter nav" id="btn-quitter">Quitter le jeu</button>
+      </div>
+    </div>
+    <p class="secondaire surimpression-bas" id="sur-aide"></p>
+  </div>
+
+  <div id="chargement">
+    <div class="charge-boite">
+      <p class="charge-ligne"><span class="spin"></span><span id="chargement-texte">Chargement…</span></p>
+      <p class="secondaire" id="chargement-detail"></p>
+      <div class="charge-actions">
+        <button class="texte nav" id="chargement-retour">Retour à la console</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="messages" aria-live="polite"></div>
+
+<script src="/static/js/app.js?v={{V}}"></script>
+<script src="/static/js/player.js?v={{V}}"></script>
+</body>
+</html>

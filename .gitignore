@@ -1,0 +1,35 @@
+# Site émulateur « nas » — fichiers exclus du dépôt
+# À placer dans /srv/data/server/emulateurs/.gitignore
+
+# Secrets et réglages propres à cette machine
+.env
+
+# Données : sauvegardes de parties, réglages par console, vignettes
+saves/
+config/
+
+# Copies de travail et artefacts
+*.bak-*
+__pycache__/
+*.pyc
+
+# EmulatorJS, si un jour il est hébergé localement (plusieurs centaines de Mo)
+web/static/emulatorjs/
+
+# Jamais de ROM ni de BIOS dans le dépôt : ils vivent dans Documents/Emulateurs,
+# hors de ce dossier. Cette ligne n'est qu'un filet de sécurité.
+*.zip
+*.nes
+*.sfc
+*.smc
+*.gb
+*.gbc
+*.md
+!README.md
+*.gen
+*.smd
+*.n64
+*.z64
+*.v64
+!EMULATEURS.md
+emu-*
