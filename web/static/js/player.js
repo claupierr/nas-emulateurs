@@ -22,6 +22,7 @@ const PLAYER = (() => {
     surveillance: null,   // surveillance du démarrage du cœur
     etatPromis: null,     // état téléchargé pendant que le cœur se charge
     filet: null, volumeAvant: null,   // voile de restauration
+    codes: [],            // codes de triche du jeu : { nom, code, actif }
   };
 
   /* ------------------------------------------------------------ lancement */
@@ -34,6 +35,7 @@ const PLAYER = (() => {
     partie.cid = c.id; partie.jid = jeu.id; partie.titre = jeu.titre; partie.slot = slot;
     partie.reglages = donnees.reglages;
     partie.core = core;
+    partie.codes = Array.isArray(donnees.codes) ? donnees.codes : [];
     EMU.etat.enJeu = true;
 
     document.documentElement.style.setProperty("--accent", c.couleur);
@@ -46,6 +48,7 @@ const PLAYER = (() => {
     $("#sur-console").textContent = c.nom;
     $("#sur-titre").textContent = jeu.titre;
     majSlot();
+    majBoutonCodes();
     $("#sur-aide").innerHTML = texteAide();
 
     const config = donnees.config || {};
@@ -128,6 +131,13 @@ const PLAYER = (() => {
         masquerBoutonsBarre();
         setTimeout(masquerBoutonsBarre, 1500);   // barre complétée après coup
       } catch (e) { console.warn("préparation du jeu", e); }
+      // Codes de triche activés lors d'une partie précédente. EmulatorJS vient
+      // de vider la liste du cœur (updateCheatUI) juste avant cet événement.
+      if (partie.codes.some((c) => c.actif)) {
+        appliquerCodes();
+        const n = partie.codes.filter((c) => c.actif).length;
+        EMU.message(`${n} code${n > 1 ? "s" : ""} de triche actif${n > 1 ? "s" : ""}`);
+      }
       // L'état est chargé APRÈS le démarrage, et non pendant (EJS_loadStateURL) :
       // un état refusé par le cœur bloquait sinon le lancement, sans message.
       // Le voile est reposé ici : le filet de sécurité repart du démarrage réel,
@@ -411,7 +421,10 @@ const PLAYER = (() => {
     enregistrerOptions();
   }
 
-  function basculerMenu() { partie.menuOuvert ? fermerMenu() : ouvrirMenu(); }
+  function basculerMenu() {
+    if (!$("#triche").hidden) return;     // la fenêtre des codes se ferme d'abord
+    partie.menuOuvert ? fermerMenu() : ouvrirMenu();
+  }
 
   // EmulatorJS ignore clavier et manette tant qu'une de ses fenêtres est ouverte
   // (isPopupOpen) : on s'assure qu'aucune ne reste ouverte en reprenant la partie.
@@ -493,6 +506,7 @@ const PLAYER = (() => {
   document.addEventListener("keydown", (ev) => {
     if (!EMU.etat.enJeu || !$("#dialogue").hidden) return;
     if (!$("#mappage").hidden || !$("#confirmation").hidden) return;   // ces fenêtres gèrent Échap
+    if (!$("#triche").hidden) return;     // saisie d'un code : P ou F2 ne sont pas des raccourcis
     const r = partie.raccourcis || {};
     const nom = EMU.nomTouche(ev.keyCode);
     if (ev.key === "Escape" || (r.menu && nom && nom === r.menu.value)) {
@@ -687,6 +701,166 @@ const PLAYER = (() => {
       majLissage();
       EMU.message(vise === "sabr" ? "Lissage activé (SABR)" : "Lissage désactivé");
     } catch (err) { EMU.message(`Lissage impossible : ${err.message}`, true); }
+  });
+
+  /* -------------------------------------------------------- codes de triche */
+
+  // Le cœur ne sait pas désactiver un code : fceumm, par exemple, ignore
+  // l'argument « enabled » de retro_cheat_set. On vide donc toute la liste du
+  // cœur, puis on y remet les seuls codes actifs, avec des index consécutifs.
+  // C'est aussi ce que fait RetroArch.
+  function appliquerCodes() {
+    const gm = gestionnaire();
+    if (!gm || typeof gm.resetCheat !== "function" || typeof gm.setCheat !== "function") {
+      EMU.message("Codes de triche indisponibles avec ce cœur", true);
+      return false;
+    }
+    try {
+      gm.resetCheat();
+      let n = 0;
+      for (const c of partie.codes) if (c.actif && c.code) gm.setCheat(n++, 1, c.code);
+      return true;
+    } catch (e) {
+      console.warn("codes non appliqués", e);
+      EMU.message(`Codes non appliqués : ${e.message}`, true);
+      return false;
+    }
+  }
+
+  function majBoutonCodes() {
+    const n = partie.codes.filter((c) => c.actif).length;
+    $("#btn-codes").textContent = n ? `Codes de triche (${n} actif${n > 1 ? "s" : ""})` : "Codes de triche";
+  }
+
+  async function enregistrerCodes() {
+    try {
+      const r = await fetch(`/api/codes/${partie.cid}/${partie.jid}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codes: partie.codes }),
+      }).then(verifier);
+      partie.codes = (await r.json()).codes || [];
+      return true;
+    } catch (e) {
+      EMU.message(`Codes non enregistrés : ${e.message}`, true);
+      return false;
+    }
+  }
+
+  // Formats acceptés, selon la console (le cœur refuse sans message un code
+  // qu'il ne sait pas lire).
+  const FORMATS_CODES = {
+    nes: "Game Genie (SXIOPO, 6 ou 8 lettres) ou adresse brute (0079:05)",
+    snes: "Game Genie (DD62-6DAD) ou Pro Action Replay (7E0DBF09)",
+    gb: "Game Genie (00A-17B-C49) ou GameShark (01FFC6C2)",
+    megadrive: "Game Genie (ATDT-EA6J) ou Pro Action Replay",
+    n64: "GameShark (8033B174 0005)",
+    neogeo: "les cœurs arcade gèrent mal les codes saisis à la main",
+  };
+
+  const SVG_EFFACER = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 '
+    + '0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+  const h = (t) => String(t).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function dessinerCodes(focusSur) {
+    const liste = $("#codes-liste");
+    liste.innerHTML = partie.codes.length ? partie.codes.map((c, i) => `
+      <div class="code-ligne">
+        <button class="code-bascule nav" data-basculer="${i}" aria-pressed="${c.actif ? "true" : "false"}">
+          <span class="interrupteur" aria-hidden="true"></span>
+          <span class="code-texte"><span class="code-nom">${h(c.nom)}</span>
+            <span class="code-valeur">${h(c.code)}</span></span>
+        </button>
+        <button class="icone code-effacer nav" data-effacer="${i}" aria-label="Supprimer ${h(c.nom)}"
+                title="Supprimer">${SVG_EFFACER}</button>
+      </div>`).join("")
+      : `<p class="vide">Aucun code pour ce jeu. Ajoutez-en un ci-dessous.</p>`;
+
+    liste.querySelectorAll("[data-basculer]").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const i = Number(el.dataset.basculer);
+        partie.codes[i].actif = !partie.codes[i].actif;
+        appliquerCodes();
+        majBoutonCodes();
+        dessinerCodes(`[data-basculer="${i}"]`);
+        EMU.message(`${partie.codes[i].nom} : ${partie.codes[i].actif ? "activé" : "désactivé"}`);
+        await enregistrerCodes();
+      });
+    });
+    liste.querySelectorAll("[data-effacer]").forEach((el) => {
+      el.addEventListener("click", async () => {
+        const i = Number(el.dataset.effacer);
+        const oui = await EMU.confirmer({
+          titre: "Supprimer ce code ?",
+          texte: `« ${partie.codes[i].nom} » (${partie.codes[i].code}) sera retiré de ce jeu.`,
+          valider: "Supprimer",
+        });
+        if (oui) {
+          partie.codes.splice(i, 1);
+          appliquerCodes();
+          majBoutonCodes();
+          await enregistrerCodes();
+        }
+        dessinerCodes();
+      });
+    });
+    const cible = focusSur && liste.querySelector(focusSur);
+    if (cible) cible.focus({ preventScroll: true });
+    else EMU.focusPremier($("#triche"));
+  }
+
+  async function ajouterCode() {
+    const nom = $("#code-nom").value.trim();
+    // Majuscules : Game Genie et codes hexadécimaux s'écrivent ainsi. Une ligne
+    // par code, ou des « + », pour plusieurs codes formant un même effet.
+    const code = $("#code-code").value.trim().toUpperCase().replace(/\s*[\r\n]+\s*/g, "+");
+    if (!code) { EMU.message("Saisissez un code", true); $("#code-code").focus(); return; }
+    if (partie.codes.length >= 100) { EMU.message("100 codes au plus par jeu", true); return; }
+    partie.codes.push({ nom: nom || code, code, actif: true });
+    appliquerCodes();
+    majBoutonCodes();
+    if (await enregistrerCodes()) {
+      $("#code-nom").value = ""; $("#code-code").value = "";
+      EMU.message(`Code ajouté et activé : ${nom || code}`);
+    }
+    dessinerCodes(`[data-basculer="${partie.codes.length - 1}"]`);
+  }
+
+  function ouvrirCodes() {
+    const boite = $("#triche");
+    const format = FORMATS_CODES[partie.cid];
+    $("#triche-aide").textContent = `Propres à ce jeu et conservés sur le serveur. `
+      + (format ? `Formats : ${format}. ` : "")
+      + "Plusieurs codes pour un même effet : les séparer par +. Un code désactivé cesse "
+      + "d'agir, mais une valeur qu'il a déjà écrite en mémoire peut subsister.";
+    boite.hidden = false;
+    dessinerCodes();
+    return new Promise((resoudre) => {
+      const fermer = () => {
+        boite.hidden = true;
+        document.removeEventListener("keydown", surTouche, true);
+        EMU.etat.fermerTriche = null;
+        resoudre();
+      };
+      const surTouche = (ev) => {
+        if (ev.key !== "Escape" || !$("#confirmation").hidden) return;
+        ev.stopPropagation(); ev.preventDefault(); fermer();
+      };
+      document.addEventListener("keydown", surTouche, true);
+      $("#triche-fermer").onclick = fermer;
+      boite.onclick = (ev) => { if (ev.target === boite) fermer(); };
+      EMU.etat.fermerTriche = fermer;
+    });
+  }
+
+  $("#code-ajouter").addEventListener("click", ajouterCode);
+  ["#code-nom", "#code-code"].forEach((s) => $(s).addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); ajouterCode(); }
+  }));
+
+  $("#btn-codes").addEventListener("click", async () => {
+    await ouvrirCodes();
+    EMU.focusPremier($("#surimpression"));
   });
 
   $("#btn-mappage").addEventListener("click", async () => {

@@ -55,6 +55,8 @@ CONFIG = Path(os.environ.get("EMU_CONFIG", str(RACINE / "config")))
 NB_SLOTS = int(os.environ.get("EMU_SLOTS", "6"))
 MAX_ETAT = 96 * 1024 * 1024        # garde-fou : un état n64 dépasse rarement 20 Mo
 MAX_IMAGE = 4 * 1024 * 1024
+MAX_CODES = 100                    # codes de triche par jeu
+MAX_CODES_OCTETS = 64 * 1024
 CDN_DEFAUT = "https://cdn.emulatorjs.org/stable/data/"
 
 RE_ID = re.compile(r"^[0-9a-f]{16}$")
@@ -408,6 +410,7 @@ def api_jeu(cid: str, jid: str):
                     "coeurs": c.get("coeurs", []), "scheme": c["scheme"],
                     "bios": bios.name if bios else ""},
         "config": config,
+        "codes": lire_codes(cid, jid),
         "reglages": lire_reglages(),
     }
 
@@ -502,6 +505,62 @@ async def api_image_ecrire(cid: str, jid: str, slot: int, request: Request):
         raise HTTPException(400, "vignette absente ou trop volumineuse")
     ecrire_binaire(dossier_sauvegarde(cid, jid) / f"slot{slot}.png", donnees)
     return {"ok": True}
+
+
+# --- codes de triche, propres à chaque jeu ---------------------------------- #
+#
+# Rangés avec les sauvegardes du jeu (saves/<console>/<id>/codes.json), donc
+# dans le miroir du mardi. Chaque code garde son état activé ou désactivé, qui
+# est réappliqué au lancement suivant.
+
+def lire_codes(cid: str, jid: str) -> list:
+    brut = lire_json(dossier_sauvegarde(cid, jid) / "codes.json", {})
+    codes = brut.get("codes") if isinstance(brut, dict) else None
+    return codes if isinstance(codes, list) else []
+
+
+def nettoyer_code(entree) -> dict | None:
+    """Un code reçu du navigateur : nom libre, code sans caractère de contrôle.
+    Les espaces sont gardés (les codes GameShark N64 en contiennent)."""
+    if not isinstance(entree, dict):
+        return None
+    nom = re.sub(r"[\x00-\x1f]", " ", str(entree.get("nom") or "")).strip()[:120]
+    code = re.sub(r"[\x00-\x1f]+", "+", str(entree.get("code") or "")).strip(" +")[:1000]
+    if not code:
+        return None
+    return {"nom": nom or code[:40], "code": code, "actif": bool(entree.get("actif"))}
+
+
+@app.get("/api/codes/{cid}/{jid}")
+def api_codes_lire(cid: str, jid: str):
+    console_ou_404(cid); id_ou_400(jid)
+    return {"codes": lire_codes(cid, jid)}
+
+
+@app.put("/api/codes/{cid}/{jid}")
+async def api_codes_ecrire(cid: str, jid: str, request: Request):
+    """Remplace la liste complète des codes du jeu (liste vide = tout effacer)."""
+    console_ou_404(cid)
+    jeu = jeu_ou_404(cid, jid)
+    brut = await request.body()
+    if len(brut) > MAX_CODES_OCTETS:
+        raise HTTPException(413, "liste de codes trop volumineuse")
+    try:
+        recu = json.loads(brut)
+    except ValueError:
+        raise HTTPException(400, "JSON invalide")
+    liste = recu.get("codes") if isinstance(recu, dict) else None
+    if not isinstance(liste, list) or len(liste) > MAX_CODES:
+        raise HTTPException(400, f"liste de {MAX_CODES} codes au plus attendue")
+    codes = [c for c in (nettoyer_code(e) for e in liste) if c]
+    d = dossier_sauvegarde(cid, jid)
+    p = d / "codes.json"
+    if codes:
+        ecrire_json(p, {"codes": codes, "date": iso(time.time())})
+        (d / "jeu.txt").write_text(f"{cid}\n{jeu['fichier']}\n{jeu['titre']}\n", encoding="utf-8")
+    elif p.is_file():
+        p.unlink()
+    return {"ok": True, "codes": codes}
 
 
 # --- réglages par console (manettes + options de l'émulateur) --------------- #

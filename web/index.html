@@ -65,6 +65,25 @@
   </div>
 </div>
 
+<!-- ------------------------------------- codes de triche du jeu en pause -->
+<div class="voile" id="triche" hidden>
+  <div class="feuille" role="dialog" aria-modal="true" aria-labelledby="triche-titre">
+    <h2 id="triche-titre">Codes de triche</h2>
+    <p class="secondaire" id="triche-aide"></p>
+    <div class="codes" id="codes-liste"></div>
+    <div class="code-ajout">
+      <input type="text" class="nav" id="code-nom" placeholder="Description (ex. vie infinie)"
+             autocomplete="off" spellcheck="false" maxlength="120">
+      <input type="text" class="nav" id="code-code" placeholder="Code (ex. SXIOPO)"
+             autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="1000">
+      <button class="tonal nav" id="code-ajouter">Ajouter</button>
+    </div>
+    <div class="actions">
+      <button class="rempli nav" id="triche-fermer">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <!-- ------------------------------------------------------------------- jeu -->
 <div id="scene" hidden>
   <div id="game"></div>
@@ -86,6 +105,7 @@
         <button class="grand tonal nav" id="btn-sauver">Sauvegarder</button>
         <button class="grand tonal nav" id="btn-charger">Charger</button>
         <button class="grand tonal nav" id="btn-lissage">Activer le lissage</button>
+        <button class="grand tonal nav" id="btn-codes">Codes de triche</button>
         <button class="grand tonal nav" id="btn-mappage">Manettes et touches</button>
         <button class="grand quitter nav" id="btn-quitter">Quitter le jeu</button>
       </div>

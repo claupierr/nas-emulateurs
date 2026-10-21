@@ -714,8 +714,9 @@ const EMU = (() => {
     const base = racine
       || (!$("#mappage").hidden ? $("#mappage")
       : (!$("#confirmation").hidden ? $("#confirmation")
+      : (!$("#triche").hidden ? $("#triche")
       : (!$("#dialogue").hidden ? $("#dialogue")
-      : (!$("#surimpression").hidden ? $("#surimpression") : document))));
+      : (!$("#surimpression").hidden ? $("#surimpression") : document)))));
     return [...base.querySelectorAll(".nav")].filter((el) =>
       !el.hidden && !el.disabled && el.offsetParent !== null);
   }
@@ -752,6 +753,7 @@ const EMU = (() => {
   function retourArriere() {
     if (!$("#mappage").hidden) { etat.fermerMappage?.(); return; }
     if (!$("#confirmation").hidden) { etat.fermerConfirmation?.(); return; }
+    if (!$("#triche").hidden) { etat.fermerTriche?.(); return; }
     if (!$("#dialogue").hidden) { etat.fermerDialogue?.(); return; }
     if (etat.enJeu) { PLAYER.basculerMenu(); return; }
     const mm = (location.hash || "").match(/^#\/m\/([a-z0-9]+)$/);
@@ -768,6 +770,14 @@ const EMU = (() => {
       if (ev.key === "Delete") { affecter(""); return; }
       const nom = TOUCHES[ev.keyCode];
       if (nom !== undefined) affecter(nom);
+      return;
+    }
+    // Saisie d'un code de triche : les touches vont au champ. Haut et bas
+    // passent d'un élément à l'autre, Échap ferme la fenêtre (player.js).
+    if (ev.target.matches && ev.target.matches("#triche input")) {
+      if (ev.key === "ArrowUp" || ev.key === "ArrowDown") {
+        ev.preventDefault(); deplacer(0, ev.key === "ArrowUp" ? -1 : 1);
+      }
       return;
     }
     if (ev.target === $("#recherche")) {

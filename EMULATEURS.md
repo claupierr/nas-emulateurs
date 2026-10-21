@@ -55,7 +55,7 @@ automatique par le nom du dossier (jetons `NES`, `SNES`, `MEGADRIVE`… et motif
 │       ├── js/diag.js   outil de diagnostic, chargé à la demande (section 7)
 │       └── img/         illustrations des manettes (NES.jpg, SNES.jpg, GBA.jpg,
 │                        MegaDrive.jpg, N64.jpg, NEOGEO.jpg)
-├── saves/<console>/<id jeu>/slot1-6.state + .png + .json (cœur) + jeu.txt
+├── saves/<console>/<id jeu>/slot1-6.state + .png + .json (cœur) + codes.json + jeu.txt
 └── config/<console>.json      écrit par le site (un par console réglée)
     config/reglages.json       facultatif, écrit à la main (section 6)
     config/dossiers.json       facultatif, écrit à la main (section 1)
@@ -91,9 +91,18 @@ emplacement libre démarre une partie neuve ; un emplacement occupé peut être 
 cœur partent ensemble).
 
 **En jeu** : le menu s'ouvre par **Échap**, par le raccourci manette, par **300 px de déplacement de souris**
-ou par un clic, et met la partie **en pause**. Six boutons : Reprendre, Sauvegarder, Charger, Activer /
-Désactiver le lissage (shader SABR), Manettes et touches, Quitter (confirmation). Un clic dans le vide
-reprend la partie. Le pointeur s'efface 3 s après son dernier mouvement.
+ou par un clic, et met la partie **en pause**. Sept boutons : Reprendre, Sauvegarder, Charger, Activer /
+Désactiver le lissage (shader SABR), Codes de triche, Manettes et touches, Quitter (confirmation). Un clic
+dans le vide reprend la partie. Le pointeur s'efface 3 s après son dernier mouvement.
+
+**Codes de triche** : une fenêtre propre au jeu lancé liste ses codes, chacun avec un **interrupteur**
+(activé / désactivé, appliqué aussitôt) et un bouton de suppression (confirmation) ; en bas, une description
+et un code pour en ajouter un, activé d'emblée. Les codes sont **conservés sur le serveur avec leur état** et
+réappliqués au lancement suivant, avec un message « n codes de triche actifs » ; le bouton du menu affiche
+leur nombre. Le code est mis en majuscules ; plusieurs codes formant un même effet se séparent par `+`.
+Formats rappelés dans la fenêtre selon la console : Game Genie ou adresse brute `0079:05` (NES), Game Genie
+ou Pro Action Replay (Super NES, Mega Drive), Game Genie ou GameShark (Game Boy), GameShark (N64). Les cœurs
+arcade gèrent mal les codes saisis à la main. Un code que le cœur ne comprend pas est ignoré **sans message**.
 
 **Sur écran tactile** (téléphone, tablette) : ni Échap ni souris, le menu s'ouvre par le **bouton à trois
 barres en haut à droite** (`#btn-menu-tactile`), affiché une fois le jeu démarré et seulement sur un appareil
@@ -122,9 +131,10 @@ restent pris en compte, ce sont des événements.
 ## 4. Sauvegardes
 
 `saves/<console>/<id jeu>/` contient `slot<n>.state`, sa vignette `slot<n>.png`, `slot<n>.json` (cœur
-utilisé et date) et `jeu.txt` (console, chemin relatif et nom lisible de la ROM). L'identifiant du jeu est un
+utilisé et date), `codes.json` (codes de triche : nom, code, actif) et `jeu.txt` (console, chemin relatif et
+nom lisible de la ROM). L'identifiant du jeu est un
 condensé **SHA-1 du chemin relatif, tronqué à 16 caractères** : renommer ou déplacer une ROM détache donc ses
-sauvegardes.
+sauvegardes et ses codes. Un jeu qui n'a que des codes, sans état, ne figure pas dans *Mes jeux*.
 
 ⚠️ **Un état n'est relisible que par le cœur qui l'a écrit.** Au **lancement** d'un jeu, choisir un
 emplacement enregistré avec un autre cœur bascule sur ce cœur pour cette partie, sans modifier le réglage de
@@ -136,7 +146,8 @@ chargement de page. Le cœur annoncé est validé contre la liste de la console,
 seconde application. Filet de sécurité : le voile se lève dans tous les cas au bout de 4 s.
 
 Garde-fous du serveur : un état est refusé au-delà de **96 Mo**, une vignette au-delà de **4 Mo**, un fichier
-de réglages au-delà de **512 ko** ; l'identifiant doit être 16 caractères hexadécimaux et le numéro
+de réglages au-delà de **512 ko**, une liste de codes au-delà de **100 codes** ou **64 ko** (nom limité à 120
+caractères, code à 1000, caractères de contrôle remplacés par `+`) ; l'identifiant doit être 16 caractères hexadécimaux et le numéro
 d'emplacement compris entre 1 et `EMU_SLOTS`.
 
 Les sauvegardes « pile » internes aux jeux (SRAM) restent dans le navigateur, pas sur le serveur.
@@ -185,6 +196,13 @@ Rien de ce qui suit n'est documenté en amont ; chacun de ces points a coûté u
   un par un. Le stick N64 (nipplejs) supporte le transform.
 - **L'objet d'EmulatorJS change de forme d'une version à l'autre** : la 4.2.3 porte tout sur l'objet
   principal, les versions récentes déplacent l'interface dans `.frontend`. `player.js` accepte les deux.
+- **Codes de triche** : le bouton `cheat` d'EmulatorJS reste masqué, tout passe par `gameManager.resetCheat()`
+  et `gameManager.setCheat(index, 1, code)`. ⚠️ Le cœur **ne sait pas désactiver un code** : fceumm ignore
+  l'argument `enabled` de `retro_cheat_set`. Chaque changement vide donc toute la liste du cœur puis y remet
+  les seuls codes actifs, avec des index consécutifs, comme RetroArch. Un code Game Genie cesse d'agir aussitôt ;
+  un code « RAM » laisse en mémoire la dernière valeur écrite, jusqu'à ce que le jeu la modifie. Au démarrage,
+  EmulatorJS vide lui-même la liste (`updateCheatUI`) juste avant `EJS_onGameStart` : les codes sont appliqués
+  dans ce dernier, jamais avant.
 - La traduction `fr-FR` **n'existe pas** sur le CDN : ne pas définir `EJS_language`.
 
 ---
@@ -245,6 +263,7 @@ DIAG.aide()        // état, manettes vues, espion des entrées, test d'appui, f
 | Direction maintenue sans rien toucher | axe au repos non nul d'un autre périphérique : l'affecter ou désactiver le joueur |
 | Clavier mort après ouverture du menu | focus resté sur le menu |
 | Croix virtuelle qui part en diagonale au centre | bloc de la croix agrandi par `transform` (section 5) |
+| Code de triche activé sans effet | format non reconnu par le cœur, ou code écrit pour une autre version du jeu (USA / Europe) |
 | Page modifiée mais inchangée | URL statiques versionnées ; sinon Ctrl+Maj+R |
 | Un jeu déposé n'apparaît pas | extension hors du tableau de la section 1, ou moins de 45 s (cache) |
 | Les sauvegardes d'un jeu ont « disparu » | ROM renommée ou déplacée : l'identifiant vient du chemin |
@@ -263,6 +282,7 @@ DIAG.aide()        // état, manettes vues, espion des entrées, test d'appui, f
 | `GET`/`HEAD` | `/{nom}` | fichier système à la racine (`neogeo.zip`), déclarée en dernier |
 | `GET`/`HEAD` · `PUT` · `DELETE` | `/api/etat/{cid}/{jid}/{slot}` | état d'un emplacement (`?core=` à l'écriture) |
 | `GET`/`HEAD` · `PUT` | `/api/image/{cid}/{jid}/{slot}` | vignette PNG (mise en cache 7 jours ; les états, jamais) |
+| `GET` · `PUT` | `/api/codes/{cid}/{jid}` | codes de triche d'un jeu ; `PUT` remplace toute la liste (vide = supprime `codes.json`) |
 | `GET` · `PUT` · `DELETE` | `/api/config/{cid}` | réglages d'une console ; `DELETE` = retour à l'origine |
 | `GET` | `/api/reglages` | réglages communs (lecture seule, voir section 6) |
 
