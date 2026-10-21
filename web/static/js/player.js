@@ -83,8 +83,9 @@ const PLAYER = (() => {
       for (const i in clavierSeul[j]) clavierSeul[j][i].value2 = "";
     }
     window.EJS_defaultControls = clavierSeul;
-    // « menu-bar-button » est le bouton à trois barres en haut à droite : on le
-    // masque d'office, la surimpression le remplace.
+    // « menu-bar-button » est le bouton à trois barres d'EmulatorJS, en haut à
+    // droite : il ouvre SA barre d'outils, que nous gardons cachée hors du menu.
+    // On le masque donc, et le bouton #btn-menu-tactile ouvre la surimpression.
     window.EJS_defaultOptions = { ...(config.options || {}), "menu-bar-button": "hidden" };
     // Fichier système : EmulatorJS décompresse le BIOS par défaut, ce qui détruit
     // l'archive que les cœurs arcade exigent (FBNeo veut « neogeo.zip » entier).
@@ -116,6 +117,7 @@ const PLAYER = (() => {
       partie.demarre = true;
       clearInterval(partie.surveillance);
       $("#chargement").hidden = true;
+      $("#btn-menu-tactile").hidden = false;   // affiché sur écran tactile seulement (CSS)
       // Chaque étape est isolée : une erreur ici ne doit pas empêcher le
       // chargement de l'état, qui vient juste après.
       try {
@@ -426,6 +428,14 @@ const PLAYER = (() => {
   $("#surimpression").addEventListener("click", (ev) => {
     if (ev.target.closest("button, select, input, a")) return;
     fermerMenu();
+  });
+
+  // Écran tactile : ni Échap ni souris, d'où ce bouton à trois barres en haut à
+  // droite. stopPropagation : le même toucher ne doit pas refermer le menu.
+  $("#btn-menu-tactile").addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (partie.demarre) ouvrirMenu();
   });
 
   // La souris ouvre le menu après 300 px de déplacement cumulé, où qu'elle soit.

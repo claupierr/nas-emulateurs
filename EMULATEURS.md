@@ -3,7 +3,7 @@
 > Fichier de référence du projet, à la racine de `/srv/data/server/emulateurs/`.
 > Le fichier général `server/CONTEXTE-SERVEUR-nas.md` n'en garde qu'un résumé.
 > **Le système réel fait foi** : en cas de doute, vérifier et corriger ce fichier.
-> Dernière mise à jour : **05/10/2026**.
+> Dernière mise à jour : **21/10/2026**.
 
 ---
 
@@ -44,7 +44,7 @@ automatique par le nom du dossier (jetons `NES`, `SNES`, `MEGADRIVE`… et motif
 /srv/data/server/emulateurs/
 ├── EMULATEURS.md        ce fichier
 ├── .env                 (600) racines des ROM — lu au DÉMARRAGE du service
-├── .gitignore           · notes git.txt  · emulateurs-web.service (copie du service)
+├── .gitignore           · notes.txt (non suivi)  · emulateurs-web.service (copie du service)
 ├── web/
 │   ├── app.py           serveur FastAPI : inventaire, fichiers, sauvegardes, réglages
 │   ├── index.html       page unique
@@ -94,6 +94,13 @@ cœur partent ensemble).
 ou par un clic, et met la partie **en pause**. Six boutons : Reprendre, Sauvegarder, Charger, Activer /
 Désactiver le lissage (shader SABR), Manettes et touches, Quitter (confirmation). Un clic dans le vide
 reprend la partie. Le pointeur s'efface 3 s après son dernier mouvement.
+
+**Sur écran tactile** (téléphone, tablette) : ni Échap ni souris, le menu s'ouvre par le **bouton à trois
+barres en haut à droite** (`#btn-menu-tactile`), affiché une fois le jeu démarré et seulement sur un appareil
+sans souris ; à l'horizontale, il est décalé de 76 px vers la gauche pour laisser la place à la gâchette R.
+La manette virtuelle d'EmulatorJS est **agrandie de 20 %** (section 5). Les menus se resserrent sur écran
+étroit (deux colonnes de cartes plutôt qu'une seule étirée) ou bas (menu en jeu sur deux colonnes, six
+emplacements sur une ligne), et le pied de page des raccourcis clavier y est masqué.
 
 **Raccourcis clavier d'origine** : **F2** sauvegarde rapide, **F4** chargement rapide, **Échap** menu,
 **P** pause — tous remappables, et sans équivalent manette tant que rien n'a été affecté.
@@ -166,6 +173,16 @@ Rien de ce qui suit n'est documenté en amont ; chacun de ces points a coûté u
 - **Plein écran** : EmulatorJS le demande sur son seul cadre, ce qui laisserait la surimpression hors écran ;
   sa méthode `toggleFullscreen` est remplacée par la nôtre, qui bascule toute la scène. Ne pas tenter de
   sortir puis redemander le plein écran : le navigateur refuse sans geste de l'utilisateur.
+- **Bouton à trois barres d'EmulatorJS** (`menu-bar-button`) : il ouvre **sa** barre d'outils, que notre CSS
+  garde invisible hors de la surimpression ; et en mode `hidden`, il est seulement rendu transparent, donc
+  toujours cliquable en haut à droite. Il est retiré par CSS (`.ejs_virtualGamepad_open`) et remplacé par
+  `#btn-menu-tactile`, qui ouvre la surimpression.
+- **Manette virtuelle** : agrandie par `transform: scale(1.2)` depuis le coin extérieur de chaque bloc,
+  **sauf la croix directionnelle**. EmulatorJS calcule la direction avec `getBoundingClientRect()` (taille
+  transformée) moins `clientWidth / 2` (taille d'origine) : agrandie par transform, son centre serait décalé
+  de 12 px et un appui au milieu enverrait bas-droite. Son bloc est donc agrandi par la taille
+  (125 → 150 px, repéré par `:has(.ejs_dpad_main)`), et les boutons rangés avec elle (L de la Super NES)
+  un par un. Le stick N64 (nipplejs) supporte le transform.
 - **L'objet d'EmulatorJS change de forme d'une version à l'autre** : la 4.2.3 porte tout sur l'objet
   principal, les versions récentes déplacent l'interface dans `.frontend`. `player.js` accepte les deux.
 - La traduction `fr-FR` **n'existe pas** sur le CDN : ne pas définir `EJS_language`.
@@ -227,6 +244,7 @@ DIAG.aide()        // état, manettes vues, espion des entrées, test d'appui, f
 | Manette reconnue au mappage, muette en jeu | mauvais périphérique affecté au joueur |
 | Direction maintenue sans rien toucher | axe au repos non nul d'un autre périphérique : l'affecter ou désactiver le joueur |
 | Clavier mort après ouverture du menu | focus resté sur le menu |
+| Croix virtuelle qui part en diagonale au centre | bloc de la croix agrandi par `transform` (section 5) |
 | Page modifiée mais inchangée | URL statiques versionnées ; sinon Ctrl+Maj+R |
 | Un jeu déposé n'apparaît pas | extension hors du tableau de la section 1, ou moins de 45 s (cache) |
 | Les sauvegardes d'un jeu ont « disparu » | ROM renommée ou déplacée : l'identifiant vient du chemin |
@@ -257,11 +275,8 @@ DIAG.aide()        // état, manettes vues, espion des entrées, test d'appui, f
 seconde copie de l'historique, indépendante de GitHub.
 
 `.gitignore` exclut `.env`, `saves/`, `config/`, `emu-*` (copies de livraison), `*.bak-*`, `__pycache__/`,
-`web/static/emulatorjs/` et toute ROM ou BIOS ; `*.md` sert à écarter les ROM Mega Drive, d'où les exceptions
-`!README.md` et `!EMULATEURS.md`.
-
-⚠️ **`notes git.txt` n'est pas exclu** : contrairement à `youtube-dl` et `traitement_medias`, où `notes.txt`
-est ignoré, ce fichier part sur GitHub. Le vérifier avant un passage en public, ou ajouter la règle.
+`web/static/emulatorjs/`, `notes.txt` et toute ROM ou BIOS ; `*.md` sert à écarter les ROM Mega Drive, d'où
+les exceptions `!README.md` et `!EMULATEURS.md`.
 
 ```bash
 cd /srv/data/server/emulateurs
