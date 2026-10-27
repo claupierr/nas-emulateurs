@@ -23,6 +23,7 @@ const PLAYER = (() => {
     etatPromis: null,     // état téléchargé pendant que le cœur se charge
     filet: null, volumeAvant: null,   // voile de restauration
     codes: [],            // codes de triche du jeu : { nom, code, actif }
+    sortieVoulue: false,  // sortie du plein écran demandée par nos soins
   };
 
   /* ------------------------------------------------------------ lancement */
@@ -32,6 +33,12 @@ const PLAYER = (() => {
     // « coeur » : cœur imposé pour cette partie seulement (sauvegarde enregistrée
     // avec un autre cœur). Le réglage de la console n'est pas modifié.
     const core = EMU.coeurAutorise(c, coeur) || c.core;
+    // Plein écran demandé tout de suite, avant toute attente : le navigateur
+    // ne l'accorde que dans les secondes qui suivent un geste de l'utilisateur
+    // (ici, le choix de l'emplacement). Refus silencieux sinon : relance après
+    // un changement de cœur, ou validation à la manette, qui ne compte pas
+    // comme un geste.
+    entrerPleinEcran();
     partie.cid = c.id; partie.jid = jeu.id; partie.titre = jeu.titre; partie.slot = slot;
     partie.reglages = donnees.reglages;
     partie.core = core;
@@ -395,6 +402,7 @@ const PLAYER = (() => {
     mettreEnPause();
     relacherTout();
     majLissage();
+    majPleinEcran();
     $("#surimpression").classList.remove("sortie");
     $("#surimpression").hidden = false;
     $("#scene").classList.add("menu");          // fait apparaître la barre EmulatorJS
@@ -469,16 +477,47 @@ const PLAYER = (() => {
 
   // Plein écran : EmulatorJS le demande sur son seul cadre de jeu, ce qui laisse
   // la surimpression hors de l'écran. « toggleFullscreen » étant une propriété
-  // d'instance, on la remplace par la nôtre, qui bascule toute la scène.
+  // d'instance, on la remplace par la nôtre.
+  // C'est la PAGE ENTIÈRE qui passe en plein écran, et non #scene : seuls
+  // l'élément en plein écran et ses descendants sont affichés, or les fenêtres
+  // de second niveau (confirmation, emplacements, mappage, codes) et les
+  // messages sont des voisins de #scene. Avec #scene, elles restaient invisibles.
+  function entrerPleinEcran() {
+    const page = document.documentElement;
+    if (document.fullscreenElement || typeof page.requestFullscreen !== "function") return;
+    page.requestFullscreen({ navigationUI: "hide" })
+      .catch((x) => console.warn("plein écran refusé :", x.message));
+  }
+
   function reprendrePleinEcran() {
     const e = emu();
     if (!e) return;
     e.toggleFullscreen = () => {
-      const scene = $("#scene");
-      if (document.fullscreenElement) document.exitFullscreen().catch((x) => console.warn(x));
-      else scene.requestFullscreen().catch((x) => console.warn("plein écran refusé", x));
+      if (document.fullscreenElement) {
+        partie.sortieVoulue = true;
+        document.exitFullscreen().catch((x) => console.warn(x));
+      } else entrerPleinEcran();
     };
   }
+
+  // Bouton « Reprendre en plein écran » de la surimpression : affiché seulement
+  // hors plein écran, et si le navigateur sait le faire (pas l'iPhone).
+  function majPleinEcran() {
+    const b = $("#btn-plein-ecran");
+    if (b) b.hidden = !!document.fullscreenElement
+      || typeof document.documentElement.requestFullscreen !== "function";
+  }
+
+  // Échap fait sortir du plein écran : le navigateur se réserve cette touche, et
+  // la page ne reçoit pas toujours l'appui. Toute sortie que nous n'avons pas
+  // demandée ouvre donc le menu, où « Reprendre en plein écran » y ramène.
+  document.addEventListener("fullscreenchange", () => {
+    majPleinEcran();
+    if (document.fullscreenElement) return;
+    const voulue = partie.sortieVoulue;
+    partie.sortieVoulue = false;
+    if (!voulue && EMU.etat.enJeu && partie.demarre) ouvrirMenu();
+  });
 
   // Deux boutons de la barre d'EmulatorJS résistent à EJS_Buttons : « Context
   // Menu », que la version 4.2.3 refuse explicitement de masquer, et « Play »,
@@ -652,6 +691,13 @@ const PLAYER = (() => {
   /* --------------------------------------------- boutons de la surimpression */
 
   $("#btn-reprendre").addEventListener("click", fermerMenu);
+
+  // Le clic (ou Entrée) est un geste de l'utilisateur : le navigateur accepte
+  // alors la demande. La partie reprend même s'il la refuse.
+  $("#btn-plein-ecran").addEventListener("click", () => {
+    entrerPleinEcran();
+    fermerMenu();
+  });
 
   $("#btn-sauver").addEventListener("click", async () => {
     const n = await EMU.ouvrirSlots({

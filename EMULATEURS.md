@@ -3,7 +3,7 @@
 > Fichier de référence du projet, à la racine de `/srv/data/server/emulateurs/`.
 > Le fichier général `server/CONTEXTE-SERVEUR-nas.md` n'en garde qu'un résumé.
 > **Le système réel fait foi** : en cas de doute, vérifier et corriger ce fichier.
-> Dernière mise à jour : **21/10/2026**.
+> Dernière mise à jour : **27/10/2026**.
 
 ---
 
@@ -90,10 +90,16 @@ cœur valable pour toute la console ; bouton « Manettes et touches ». **Emplac
 emplacement libre démarre une partie neuve ; un emplacement occupé peut être **supprimé** (état, vignette et
 cœur partent ensemble).
 
+**Plein écran** : demandé **au lancement** du jeu, sur la page entière. Le navigateur ne l'accorde qu'après
+un geste de l'utilisateur : choix de l'emplacement à la souris ou au clavier, oui ; à la **manette**, ou lors
+d'une relance automatique après un changement de cœur, non — le jeu démarre alors en fenêtre, sans message.
+
 **En jeu** : le menu s'ouvre par **Échap**, par le raccourci manette, par **300 px de déplacement de souris**
 ou par un clic, et met la partie **en pause**. Sept boutons : Reprendre, Sauvegarder, Charger, Activer /
-Désactiver le lissage (shader SABR), Codes de triche, Manettes et touches, Quitter (confirmation). Un clic
-dans le vide reprend la partie. Le pointeur s'efface 3 s après son dernier mouvement.
+Désactiver le lissage (shader SABR), Codes de triche, Manettes et touches, Quitter (confirmation) ; hors
+plein écran, un huitième en tête, **Reprendre en plein écran** (sélectionné d'office : Échap puis Entrée y
+ramènent). Une sortie du plein écran qui ne vient pas du site (Échap, que le navigateur se réserve) ouvre le
+menu. Un clic dans le vide reprend la partie. Le pointeur s'efface 3 s après son dernier mouvement.
 
 **Codes de triche** : une fenêtre propre au jeu lancé liste ses codes, chacun avec un **interrupteur**
 (activé / désactivé, appliqué aussitôt) et un bouton de suppression (confirmation) ; en bas, une description
@@ -118,9 +124,12 @@ emplacements sur une ligne), et le pied de page des raccourcis clavier y est mas
 manette à droite, quatre onglets de joueur, deux colonnes clavier et manette, et en bas deux raccourcis —
 sauvegarde et chargement rapides, mappables y compris sur une gâchette. Un menu déroulant affecte un
 **périphérique précis à chaque joueur** (ou le désactive), un témoin s'allume quand ce périphérique envoie
-quelque chose, et le bouton **Enregistrer** valide l'ensemble. Tout est propre à chaque console : touches,
-périphériques, raccourcis, cœur choisi, volume (0,5 au départ) et options. Un bouton remet la console dans
-son état d'origine en supprimant son `config/<console>.json`.
+quelque chose, et le bouton **Enregistrer** valide l'ensemble. **Saisie enchaînée** : une fois une case
+affectée, la case suivante de la même colonne se met à l'écoute, jusqu'au bas du tableau (raccourcis
+compris) ; **Suppr** vide la case et passe à la suivante, **Échap** ou un clic ailleurs arrête. Côté manette,
+la case suivante n'écoute qu'une fois boutons relâchés et sticks revenus au repos. Tout est propre à chaque
+console : touches, périphériques, raccourcis, cœur choisi, volume (0,5 au départ) et options. Un bouton remet
+la console dans son état d'origine en supprimant son `config/<console>.json`.
 
 **Manettes** : détectées **à la demande** seulement, par le bouton `⟳ manettes` de la barre ou de la page de
 mappage. Tant qu'aucune manette n'est connue, aucune scrutation n'a lieu ; branchement et débranchement
@@ -182,8 +191,13 @@ Rien de ce qui suit n'est documenté en amont ; chacun de ces points a coûté u
   ne peut pas être masqué par configuration ; la pause réaffiche `play` en forçant son style. Ces deux-là
   sont donc neutralisés par une classe CSS portant `!important`.
 - **Plein écran** : EmulatorJS le demande sur son seul cadre, ce qui laisserait la surimpression hors écran ;
-  sa méthode `toggleFullscreen` est remplacée par la nôtre, qui bascule toute la scène. Ne pas tenter de
-  sortir puis redemander le plein écran : le navigateur refuse sans geste de l'utilisateur.
+  sa méthode `toggleFullscreen` est remplacée par la nôtre, qui bascule **la page entière**
+  (`document.documentElement`). ⚠️ Pas `#scene` : seuls l'élément en plein écran et ses descendants sont
+  affichés, et les fenêtres de second niveau (`#confirmation`, `#dialogue`, `#mappage`, `#triche`) ainsi que
+  `#messages` sont voisines de `#scene` — elles restaient invisibles (confirmation de sortie, mappage). Ne pas
+  tenter de sortir puis redemander le plein écran : le navigateur refuse sans geste de l'utilisateur, et un
+  appui de manette n'en est pas un. L'API Keyboard Lock, qui permettrait de garder Échap, exige HTTPS :
+  indisponible sur `http://nas:8097`.
 - **Bouton à trois barres d'EmulatorJS** (`menu-bar-button`) : il ouvre **sa** barre d'outils, que notre CSS
   garde invisible hors de la surimpression ; et en mode `hidden`, il est seulement rendu transparent, donc
   toujours cliquable en haut à droite. Il est retiré par CSS (`.ejs_virtualGamepad_open`) et remplacé par
@@ -262,6 +276,8 @@ DIAG.aide()        // état, manettes vues, espion des entrées, test d'appui, f
 | Manette reconnue au mappage, muette en jeu | mauvais périphérique affecté au joueur |
 | Direction maintenue sans rien toucher | axe au repos non nul d'un autre périphérique : l'affecter ou désactiver le joueur |
 | Clavier mort après ouverture du menu | focus resté sur le menu |
+| Jeu lancé en fenêtre et non en plein écran | lancé à la manette ou relancé automatiquement : bouton « Reprendre en plein écran » du menu, à la souris ou au clavier |
+| Une fenêtre du menu (confirmation, mappage) n'apparaît pas en plein écran | plein écran demandé sur un autre élément que la page entière (section 5) |
 | Croix virtuelle qui part en diagonale au centre | bloc de la croix agrandi par `transform` (section 5) |
 | Code de triche activé sans effet | format non reconnu par le cœur, ou code écrit pour une autre version du jeu (USA / Europe) |
 | Page modifiée mais inchangée | URL statiques versionnées ; sinon Ctrl+Maj+R |

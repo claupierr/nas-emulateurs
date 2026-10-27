@@ -211,14 +211,15 @@ const EMU = (() => {
     document.documentElement.style.setProperty("--accent", c.couleur);
     majBarre({ titre: `Manettes — ${c.nom}`, retour: true, recherche: false });
     majAide([
-      "Cliquez une case puis appuyez sur la touche ou le bouton voulu",
-      "<b>Suppr</b> efface l'affectation · <b>Échap</b> annule",
+      "Cliquez une case puis appuyez sur la touche ou le bouton voulu : la case suivante prend le relais",
+      "<b>Suppr</b> efface l'affectation et passe à la suivante · <b>Échap</b> arrête",
       "Chaque console garde son propre réglage",
     ]);
     dessinerMappage(cid, 0);
   }
 
   function dessinerMappage(cid, joueur, cible) {
+    annulerEcoute(false);           // la case écoutée va être remplacée
     const zone = cible || vue;
     etat.mapJoueur = joueur;
     const q = (sel) => zone.querySelector(sel);
@@ -357,7 +358,11 @@ const EMU = (() => {
       data-joueur="${joueur}" data-index="${index}" data-colonne="${colonne}">${h(texte)}</button>`;
   }
 
-  function ecouter(cid, el) {
+  // « repos » n'est fourni qu'en enchaînement (case suivante, voir affecter) :
+  // c'est l'état des manettes relevé au début de la série. La capture attend
+  // alors que tout y soit revenu, sinon le bouton encore enfoncé, ou le stick
+  // qui revient au centre, serait aussitôt affecté à la case suivante.
+  function ecouter(cid, el, repos = null) {
     annulerEcoute();
     el.classList.add("ecoute");
     el.textContent = el.dataset.colonne === "value" ? "appuyez sur une touche…" : "appuyez sur un bouton…";
@@ -368,7 +373,16 @@ const EMU = (() => {
       index: Number(el.dataset.index),
       colonne: el.dataset.colonne,
       base: null,
+      repos, attente: !!repos,
     };
+  }
+
+  // Case suivante de la même colonne (clavier ou manette), raccourcis compris.
+  function caseSuivante(el) {
+    const zone = el.closest("#mappage-contenu") || vue;
+    const colonne = [...zone.querySelectorAll(`.cellule[data-colonne="${el.dataset.colonne}"]`)];
+    const i = colonne.indexOf(el);
+    return i >= 0 ? colonne[i + 1] || null : null;
   }
 
   function valeurCapturee(c) {
@@ -390,6 +404,7 @@ const EMU = (() => {
   function affecter(valeur) {
     const c = etat.capture;
     if (!c) return;
+    const suivante = caseSuivante(c.el);
     if (c.raccourci) {
       if (!etat.raccourcis[c.raccourci]) etat.raccourcis[c.raccourci] = {};
       etat.raccourcis[c.raccourci][c.colonne] = valeur;
@@ -403,6 +418,15 @@ const EMU = (() => {
     pad.verrou = performance.now() + 500;
     pad.boutons.clear();
     marquerModifie();
+    // Enchaînement : la case suivante de la colonne se met à l'écoute.
+    if (suivante && suivante.isConnected) {
+      suivante.focus({ preventScroll: true });
+      suivante.scrollIntoView({ block: "nearest", inline: "nearest" });
+      ecouter(c.cid, suivante, c.repos || c.base);
+    } else {
+      c.el.focus({ preventScroll: true });
+      message("Fin de la colonne — pensez à enregistrer");
+    }
   }
 
   function marquerModifie() {
@@ -426,6 +450,7 @@ const EMU = (() => {
     focusPremier(boite);
     return new Promise((resoudre) => {
       const fermer = () => {
+        annulerEcoute(false);       // sinon le clavier resterait capturé en jeu
         boite.hidden = true;
         document.removeEventListener("keydown", surTouche, true);
         etat.fermerMappage = null;
@@ -765,9 +790,11 @@ const EMU = (() => {
     // Page de mappage : la frappe sert à affecter une touche, pas à naviguer.
     if (etat.capture) {
       ev.preventDefault(); ev.stopPropagation();
+      // Touche maintenue : sa répétition ne doit pas remplir les cases suivantes.
+      if (ev.repeat) return;
       if (ev.key === "Escape") { annulerEcoute(); return; }
+      if (ev.key === "Delete") { affecter(""); return; }   // les deux colonnes
       if (etat.capture.colonne !== "value") return;
-      if (ev.key === "Delete") { affecter(""); return; }
       const nom = TOUCHES[ev.keyCode];
       if (nom !== undefined) affecter(nom);
       return;
@@ -803,6 +830,12 @@ const EMU = (() => {
         }
     }
   });
+
+  // Un clic ailleurs que sur la case à l'écoute (Enregistrer, un onglet, la
+  // fenêtre…) arrête l'enchaînement. Phase de capture : avant le bouton cliqué.
+  document.addEventListener("click", (ev) => {
+    if (etat.capture && ev.target !== etat.capture.el && !etat.capture.el.contains(ev.target)) annulerEcoute();
+  }, true);
 
   $("#retour").addEventListener("click", retourArriere);
   $("#recherche").addEventListener("input", (ev) => { etat.filtre = ev.target.value; dessinerJeux(); });
@@ -921,6 +954,12 @@ const EMU = (() => {
   function capturerPad(pads) {
     const c = etat.capture;
     if (c.colonne !== "value2") return;
+    if (c.attente) {
+      // Enchaînement : on attend le retour au repos (boutons relâchés, axes
+      // revenus), puis on relève une nouvelle référence au tour suivant.
+      if (manettesAuRepos(pads, c.repos)) c.attente = false;
+      return;
+    }
     if (!c.base) {
       c.base = pads.map((p) => ({
         index: p.index,
@@ -948,6 +987,15 @@ const EMU = (() => {
         }
       }
     }
+  }
+
+  function manettesAuRepos(pads, repos) {
+    return pads.every((p) => {
+      const ref = repos.find((r) => r.index === p.index);
+      if (!ref) return true;
+      return p.buttons.every((b, i) => !appuye(b) || ref.boutons[i])
+        && p.axes.every((a, i) => Math.abs(a - (ref.axes[i] || 0)) < ZONE_MORTE / 2);
+    });
   }
 
   const appuye = (b) => (typeof b === "object" ? (b.pressed || b.value > 0.5) : b > 0.5);
@@ -986,6 +1034,7 @@ const EMU = (() => {
 
   async function router() {
     if (etat.enJeu) return;                    // le lecteur gère sa propre sortie
+    annulerEcoute(false);
     const h = location.hash || "#/";
     try {
       const mc = h.match(/^#\/c\/([a-z0-9]+)$/);

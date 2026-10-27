@@ -11,9 +11,10 @@ The user interface is in French.
 - **Six consoles**: NES, Super NES, Game Boy, Mega Drive, Nintendo 64 and Neo Geo, each with a default emulation core and one or more alternatives selectable per console.
 - **Library**: games with saves appear first as thumbnails taken from their latest state; the others are listed compactly. Type anywhere to search.
 - **Server-side save states**: six slots per game, each with a thumbnail and a record of the core that wrote it. Loading a slot saved with another core switches to that core for the session.
+- **Fullscreen**: games start in fullscreen (the whole page, so every dialog stays visible); a "resume in fullscreen" button appears in the menu when the browser has left it.
 - **In-game overlay menu** (pauses the game): resume, save, load, toggle smoothing (SABR shader), cheat codes, controllers and keys, quit.
 - **Cheat codes per game**: add, enable, disable or delete codes from the in-game menu. Codes and their on/off state are stored on the server and re-applied on the next launch.
-- **Controllers**: keyboard, mouse and up to four USB gamepads. Each player can be assigned a specific device, axes are calibrated against their resting position (useful for HID pedals and joysticks), and quick save, quick load and menu shortcuts can be mapped to any button. All settings are kept separately for each console.
+- **Controllers**: keyboard, mouse and up to four USB gamepads. Each player can be assigned a specific device, axes are calibrated against their resting position (useful for HID pedals and joysticks), and quick save, quick load and menu shortcuts can be mapped to any button. Mapping is chained: once a cell is assigned, the next one in the column starts listening. All settings are kept separately for each console.
 - **Mouse, keyboard and gamepad navigation** throughout the menus.
 - **Mobile support**: compact responsive layout, a touch menu button in the top-right corner, and an EmulatorJS virtual gamepad enlarged by 20 %.
 
