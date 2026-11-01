@@ -160,7 +160,7 @@ button { font: inherit; }
 .icone:hover, .icone:focus-visible { background: var(--surface-haut); }
 
 :focus { outline: none; }
-:focus-visible, .pointe {
+:focus-visible {
   outline: 3px solid var(--accent); outline-offset: 3px;
 }
 

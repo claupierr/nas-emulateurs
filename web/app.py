@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,20 +37,6 @@ from fastapi.staticfiles import StaticFiles
 BASE = Path(__file__).resolve().parent          # .../emulateurs/web
 RACINE = BASE.parent                            # .../emulateurs
 ROMS = Path(os.environ.get("EMU_ROMS", "/srv/data/Documents/Emulateurs"))
-
-
-def racine_console(cid: str):
-    """Dossier imposé pour une console, par l'environnement (fichier .env, lu au
-    démarrage du service) : EMU_ROMS_NES, EMU_ROMS_SNES, EMU_ROMS_GB,
-    EMU_ROMS_MEGADRIVE, EMU_ROMS_N64, EMU_ROMS_NEOGEO. Chemin absolu, ou nom d'un
-    sous-dossier de EMU_ROMS. Vide ou absent : reconnaissance automatique."""
-    valeur = (os.environ.get(f"EMU_ROMS_{cid.upper()}") or "").strip().strip('"')
-    if not valeur:
-        return None
-    p = Path(valeur)
-    if not p.is_absolute():
-        p = ROMS / valeur
-    return p if p.is_dir() else None
 SAVES = Path(os.environ.get("EMU_SAVES", str(RACINE / "saves")))
 CONFIG = Path(os.environ.get("EMU_CONFIG", str(RACINE / "config")))
 NB_SLOTS = int(os.environ.get("EMU_SLOTS", "6"))
@@ -57,9 +44,12 @@ MAX_ETAT = 96 * 1024 * 1024        # garde-fou : un état n64 dépasse rarement 
 MAX_IMAGE = 4 * 1024 * 1024
 MAX_CODES = 100                    # codes de triche par jeu
 MAX_CODES_OCTETS = 64 * 1024
+MAX_CONFIG = 512 * 1024            # réglages d'une console
+DUREE_CACHE = 45                   # s : inventaire relu seul après un dépôt par Samba
 CDN_DEFAUT = "https://cdn.emulatorjs.org/stable/data/"
 
 RE_ID = re.compile(r"^[0-9a-f]{16}$")
+RE_FICHIER_SLOT = re.compile(r"^slot(\d+)\.(state|png)$")
 
 # Raccourcis d'une console : nom de touche (table d'EmulatorJS) et étiquette de
 # bouton de manette. Vides côté manette tant que l'utilisateur n'a rien affecté.
@@ -120,8 +110,10 @@ CONSOLES = [
         "motifs": ["NEOGEO"],
         "ext": [".zip", ".7z", ".neo"],
         "options": {"shader": "disabled"},
-        # fichiers système du core arcade : jamais proposés comme jeu
-        "exclus": {"neogeo.zip", "neogeo.7z", "pgm.zip", "decrypted.zip"},
+        # BIOS servi au cœur arcade, par ordre de préférence
+        "bios": ["neogeo.zip", "neogeo.7z"],
+        # fichiers système : jamais proposés comme jeu (le BIOS s'y ajoute)
+        "exclus": {"pgm.zip", "decrypted.zip"},
     },
 ]
 
@@ -135,9 +127,14 @@ app = FastAPI(title="Émulateur nas", docs_url=None, redoc_url=None)
 # --------------------------------------------------------------------------- #
 
 def lire_json(chemin: Path, defaut):
+    """Fichier absent : valeur par défaut, en silence. Fichier illisible ou JSON
+    abîmé : valeur par défaut aussi, mais signalé dans le journal du service."""
     try:
         return json.loads(chemin.read_text(encoding="utf-8"))
-    except Exception:
+    except FileNotFoundError:
+        return defaut
+    except (OSError, ValueError) as e:
+        print(f"{chemin} ignoré : {type(e).__name__} : {e}", file=sys.stderr, flush=True)
         return defaut
 
 
@@ -154,6 +151,12 @@ def ecrire_binaire(chemin: Path, donnees: bytes) -> None:
     tmp = chemin.with_suffix(chemin.suffix + ".tmp")
     tmp.write_bytes(donnees)
     os.replace(tmp, chemin)
+
+
+def dans(chemin: Path, racine: Path) -> bool:
+    """Le chemin résolu reste-t-il sous la racine ? (Une simple comparaison de
+    préfixes accepterait « /racine-bis » pour « /racine ».)"""
+    return chemin.resolve().is_relative_to(racine.resolve())
 
 
 def iso(horodatage: float) -> str:
@@ -203,16 +206,47 @@ def id_ou_400(jid: str) -> str:
     return jid
 
 
+def coeurs_connus(c: dict) -> set:
+    """Cœurs acceptés pour une console : celui d'origine et ses variantes."""
+    return {c["core"], *c.get("coeurs", [])}
+
+
+def noms_systeme(c: dict) -> set:
+    """Fichiers d'une console qui ne sont jamais des jeux (BIOS compris)."""
+    return {n.lower() for n in (*c.get("bios", []), *c.get("exclus", []))}
+
+
 # --------------------------------------------------------------------------- #
 # Inventaire des ROM
 # --------------------------------------------------------------------------- #
+
+def racine_console(cid: str):
+    """Dossier imposé pour une console, par l'environnement (fichier .env, lu au
+    démarrage du service) : EMU_ROMS_NES, EMU_ROMS_SNES, EMU_ROMS_GB,
+    EMU_ROMS_MEGADRIVE, EMU_ROMS_N64, EMU_ROMS_NEOGEO. Chemin absolu, ou nom d'un
+    sous-dossier de EMU_ROMS. Vide ou absent : reconnaissance automatique."""
+    valeur = (os.environ.get(f"EMU_ROMS_{cid.upper()}") or "").strip().strip('"')
+    if not valeur:
+        return None
+    p = Path(valeur)
+    if not p.is_absolute():
+        p = ROMS / valeur
+    return p if p.is_dir() else None
+
+
+_cache_dossiers: list = [0.0, {}]
+
 
 def dossiers_roms() -> dict:
     """Associe chaque console à son sous-dossier de /srv/data/Documents/Emulateurs.
 
     La reconnaissance est automatique (A-NES, D-SNES, Mega Drive…). Elle peut être
     forcée par config/dossiers.json, par exemple : {"neogeo": "F-NEOGEO"}.
+    Résultat gardé DUREE_CACHE secondes : chaque requête en a besoin, parfois
+    plusieurs fois, et la recherche parcourt le dossier des ROM.
     """
+    if time.time() - _cache_dossiers[0] < DUREE_CACHE:
+        return _cache_dossiers[1]
     forces = lire_json(CONFIG / "dossiers.json", {})
     trouves: dict = {}
     sous = (sorted((d for d in ROMS.iterdir() if d.is_dir()), key=lambda d: d.name)
@@ -227,7 +261,7 @@ def dossiers_roms() -> dict:
         if cid in forces:
             p = (ROMS / str(forces[cid])).resolve()
             # un « .. » glissé dans le fichier ne doit pas faire sortir de la racine
-            if p.is_dir() and str(p).startswith(str(ROMS.resolve())):
+            if p.is_dir() and dans(p, ROMS):
                 trouves[cid] = p
             continue
         for d in sous:
@@ -236,27 +270,28 @@ def dossiers_roms() -> dict:
             if (jetons(d.name) & c["jetons"]) or any(m in normaliser(d.name) for m in c["motifs"]):
                 trouves[cid] = d
                 break
+    _cache_dossiers[0], _cache_dossiers[1] = time.time(), trouves
     return trouves
 
 
 _cache_jeux: dict = {}
 
 
-def lister_jeux(cid: str) -> list:
-    """Liste triée des ROM d'une console.
+def inventaire(cid: str) -> tuple:
+    """Liste triée des ROM d'une console, et index de cette liste par identifiant.
 
-    Cache de 45 s : le disque est relu tout seul peu après l'ajout d'un fichier
-    par Samba, sans que l'utilisateur ait à demander quoi que ce soit."""
+    Cache de DUREE_CACHE secondes : le disque est relu tout seul peu après l'ajout
+    d'un fichier par Samba, sans que l'utilisateur ait à demander quoi que ce soit."""
     c = console_ou_404(cid)
     dossier = dossiers_roms().get(cid)
     cle = (cid, str(dossier))
     vieux = _cache_jeux.get(cle)
-    if vieux and time.time() - vieux[0] < 45:
-        return vieux[1]
+    if vieux and time.time() - vieux[0] < DUREE_CACHE:
+        return vieux[1], vieux[2]
 
     jeux = []
     if dossier and dossier.is_dir():
-        exclus = {n.lower() for n in c.get("exclus", set())}
+        exclus = noms_systeme(c)
         for f in sorted(dossier.rglob("*")):
             if not f.is_file() or f.name.startswith("."):
                 continue
@@ -271,16 +306,21 @@ def lister_jeux(cid: str) -> list:
                 "taille": f.stat().st_size,
             })
     jeux.sort(key=lambda j: cle_tri(j["titre"]))
-    _cache_jeux[cle] = (time.time(), jeux)
-    return jeux
+    index = {j["id"]: j for j in jeux}
+    _cache_jeux[cle] = (time.time(), jeux, index)
+    return jeux, index
+
+
+def lister_jeux(cid: str) -> list:
+    return inventaire(cid)[0]
 
 
 def jeu_ou_404(cid: str, jid: str) -> dict:
     id_ou_400(jid)
-    for j in lister_jeux(cid):
-        if j["id"] == jid:
-            return j
-    raise HTTPException(404, "jeu introuvable")
+    jeu = inventaire(cid)[1].get(jid)
+    if not jeu:
+        raise HTTPException(404, "jeu introuvable")
+    return jeu
 
 
 def chemin_rom(cid: str, jeu: dict) -> Path:
@@ -288,7 +328,7 @@ def chemin_rom(cid: str, jeu: dict) -> Path:
     if not dossier:
         raise HTTPException(404, "dossier de ROM introuvable")
     p = (dossier / jeu["fichier"]).resolve()
-    if not str(p).startswith(str(dossier.resolve())) or not p.is_file():
+    if not dans(p, dossier) or not p.is_file():
         raise HTTPException(404, "fichier introuvable")
     return p
 
@@ -299,6 +339,13 @@ def chemin_rom(cid: str, jeu: dict) -> Path:
 
 def dossier_sauvegarde(cid: str, jid: str) -> Path:
     return SAVES / cid / jid
+
+
+def ecrire_memo(cid: str, jeu: dict) -> None:
+    """jeu.txt : mémo lisible dans la sauvegarde hebdomadaire (console, chemin
+    relatif et nom de la ROM), l'identifiant du dossier n'étant qu'un condensé."""
+    (dossier_sauvegarde(cid, jeu["id"]) / "jeu.txt").write_text(
+        f"{cid}\n{jeu['fichier']}\n{jeu['titre']}\n", encoding="utf-8")
 
 
 def etat_des_slots(cid: str, jid: str) -> list:
@@ -325,7 +372,8 @@ def resume_sauvegardes(cid: str) -> dict:
     """Nombre d'états et vignette la plus récente de chaque jeu d'une console.
 
     Un seul parcours du dossier, au lieu de douze appels à stat() par jeu : sur
-    une bibliothèque de plusieurs centaines de titres, la différence est nette."""
+    une bibliothèque de plusieurs centaines de titres, la différence est nette.
+    Seuls comptent les emplacements 1 à NB_SLOTS, comme dans etat_des_slots."""
     resume: dict = {}
     racine = SAVES / cid
     if not racine.is_dir():
@@ -336,19 +384,22 @@ def resume_sauvegardes(cid: str) -> dict:
         etats, image, recent = 0, None, -1.0
         try:
             for f in d.iterdir():
-                if f.suffix == ".state":
+                m = RE_FICHIER_SLOT.match(f.name)
+                if not m or not 1 <= int(m.group(1)) <= NB_SLOTS:
+                    continue
+                if m.group(2) == "state":
                     etats += 1
-                elif f.suffix == ".png":
-                    m = f.stat().st_mtime
-                    if m > recent:
-                        recent, image = m, f
-        except OSError:
+                else:
+                    date = f.stat().st_mtime
+                    if date > recent:
+                        recent, image = date, int(m.group(1))
+        except OSError as e:
+            print(f"{d} ignoré : {type(e).__name__} : {e}", file=sys.stderr, flush=True)
             continue
         if etats:
             resume[d.name] = {
                 "sauvegardes": etats,
-                "vignette": (f"/api/image/{cid}/{d.name}/{image.stem.replace('slot', '')}"
-                             f"?v={int(recent)}") if image else None,
+                "vignette": f"/api/image/{cid}/{d.name}/{image}?v={int(recent)}" if image else None,
             }
     return resume
 
@@ -357,6 +408,18 @@ def resume_sauvegardes(cid: str) -> dict:
 # API
 # --------------------------------------------------------------------------- #
 
+def decrire_console(c: dict, config: dict | None = None) -> dict:
+    """Ce que le navigateur sait d'une console ; avec ses réglages, le cœur
+    choisi et la liste des variantes en plus."""
+    d = dossiers_roms().get(c["id"])
+    sortie = {"id": c["id"], "nom": c["nom"], "constructeur": c["constructeur"],
+              "couleur": c["couleur"], "dossier": d.name if d else None}
+    if config is not None:
+        sortie.update(core=config["core"] or c["core"], core_origine=c["core"],
+                      coeurs=c.get("coeurs", []))
+    return sortie
+
+
 @app.get("/sante")
 def sante():
     return Response("ok", media_type="text/plain")
@@ -364,50 +427,35 @@ def sante():
 
 @app.get("/api/consoles")
 def api_consoles():
-    dossiers = dossiers_roms()
     sortie = []
     for c in CONSOLES:
-        d = dossiers.get(c["id"])
-        sortie.append({
-            "id": c["id"], "nom": c["nom"], "constructeur": c["constructeur"],
-            "couleur": c["couleur"], "core": c["core"],
-            "dossier": d.name if d else None,
-            "jeux": len(lister_jeux(c["id"])) if d else 0,
-        })
-    return {"consoles": sortie, "racine": str(ROMS), "slots": NB_SLOTS}
+        console = decrire_console(c)
+        console["jeux"] = len(lister_jeux(c["id"])) if console["dossier"] else 0
+        sortie.append(console)
+    return {"consoles": sortie, "racine": str(ROMS)}
 
 
 @app.get("/api/consoles/{cid}/jeux")
 def api_jeux(cid: str):
     c = console_ou_404(cid)
-    config = lire_config(cid)
     resume = resume_sauvegardes(cid)
     jeux = []
     for j in lister_jeux(cid):
         r = resume.get(j["id"], {})
         jeux.append({**j, "sauvegardes": r.get("sauvegardes", 0), "vignette": r.get("vignette")})
-    d = dossiers_roms().get(cid)
-    return {
-        "console": {"id": c["id"], "nom": c["nom"], "constructeur": c["constructeur"],
-                    "couleur": c["couleur"], "dossier": d.name if d else None,
-                    "core": config["core"] or c["core"], "core_origine": c["core"],
-                    "coeurs": c.get("coeurs", [])},
-        "jeux": jeux,
-    }
+    return {"console": decrire_console(c, lire_config(cid)), "jeux": jeux}
 
 
 @app.get("/api/jeux/{cid}/{jid}")
 def api_jeu(cid: str, jid: str):
     c = console_ou_404(cid)
     jeu = jeu_ou_404(cid, jid)
-    bios = dossier_bios(cid)
+    bios = fichier_bios(cid)
     config = lire_config(cid)
     return {
         "jeu": jeu,
         "slots": etat_des_slots(cid, jid),
-        "console": {"id": c["id"], "nom": c["nom"], "couleur": c["couleur"],
-                    "core": config["core"] or c["core"], "core_origine": c["core"],
-                    "coeurs": c.get("coeurs", []), "scheme": c["scheme"],
+        "console": {**decrire_console(c, config), "scheme": c["scheme"],
                     "bios": bios.name if bios else ""},
         "config": config,
         "codes": lire_codes(cid, jid),
@@ -431,13 +479,14 @@ def api_rom(cid: str, jid: str, nom: str = ""):
                         headers={"Cache-Control": "public, max-age=86400"})
 
 
-def dossier_bios(cid: str):
-    """Fichier système éventuel (neogeo.zip pour le core arcade)."""
+def fichier_bios(cid: str):
+    """BIOS éventuel de la console (neogeo.zip pour le cœur arcade), cherché à
+    côté des jeux dans l'ordre de préférence de la clé « bios »."""
     c = PAR_ID.get(cid)
     d = dossiers_roms().get(cid)
     if not c or not d:
         return None
-    for nom in sorted(c.get("exclus", [])):
+    for nom in c.get("bios", []):
         p = d / nom
         if p.is_file():
             return p
@@ -458,21 +507,18 @@ def api_etat_lire(cid: str, jid: str, slot: int):
 async def api_etat_ecrire(cid: str, jid: str, slot: int, request: Request, core: str = ""):
     """Un état n'est relisible que par le cœur qui l'a produit : on note lequel,
     pour pouvoir refuser un chargement incompatible plutôt que de planter."""
-    console_ou_404(cid); slot_ou_400(slot)
+    c = console_ou_404(cid); slot_ou_400(slot)
     jeu = jeu_ou_404(cid, jid)
     donnees = await request.body()
     if not donnees:
         raise HTTPException(400, "contenu vide")
     if len(donnees) > MAX_ETAT:
         raise HTTPException(413, "état trop volumineux")
-    c = PAR_ID[cid]
-    connus = {c["core"], *c.get("coeurs", [])}
     d = dossier_sauvegarde(cid, jid)
     ecrire_binaire(d / f"slot{slot}.state", donnees)
     ecrire_json(d / f"slot{slot}.json",
-                {"core": core if core in connus else "", "date": iso(time.time())})
-    # mémo lisible dans la sauvegarde hebdomadaire
-    (d / "jeu.txt").write_text(f"{cid}\n{jeu['fichier']}\n{jeu['titre']}\n", encoding="utf-8")
+                {"core": core if core in coeurs_connus(c) else "", "date": iso(time.time())})
+    ecrire_memo(cid, jeu)
     return {"ok": True, "slots": etat_des_slots(cid, jid)}
 
 
@@ -557,7 +603,7 @@ async def api_codes_ecrire(cid: str, jid: str, request: Request):
     p = d / "codes.json"
     if codes:
         ecrire_json(p, {"codes": codes, "date": iso(time.time())})
-        (d / "jeu.txt").write_text(f"{cid}\n{jeu['fichier']}\n{jeu['titre']}\n", encoding="utf-8")
+        ecrire_memo(cid, jeu)
     elif p.is_file():
         p.unlink()
     return {"ok": True, "codes": codes}
@@ -569,6 +615,8 @@ def lire_config(cid: str) -> dict:
     """Réglages d'une console : d'origine, puis ce que l'utilisateur a enregistré."""
     c = PAR_ID[cid]
     enregistre = lire_json(CONFIG / f"{cid}.json", {})
+    if not isinstance(enregistre, dict):
+        enregistre = {}
     options = dict(c.get("options", {}))
     options.update(enregistre.get("options") or {})
     raccourcis = {k: dict(v) for k, v in RACCOURCIS_DEFAUT.items()}
@@ -581,8 +629,9 @@ def lire_config(cid: str) -> dict:
         "volume": enregistre.get("volume", 0.5),
         # quel périphérique pilote quel joueur : "<id>_<index>" ou "" (ordre par défaut)
         "manettes": enregistre.get("manettes") or ["", "", "", ""],
-        # cœur d'émulation : vide = celui d'origine de la console
-        "core": enregistre.get("core") or "",
+        # cœur d'émulation : vide = celui d'origine ; un nom inconnu est écarté,
+        # car il finirait dans le chargeur d'EmulatorJS
+        "core": enregistre.get("core") if enregistre.get("core") in coeurs_connus(c) else "",
         "raccourcis": raccourcis,
         "personnalise": bool(enregistre),
     }
@@ -596,9 +645,9 @@ def api_config_lire(cid: str):
 
 @app.put("/api/config/{cid}")
 async def api_config_ecrire(cid: str, request: Request):
-    console_ou_404(cid)
+    c = console_ou_404(cid)
     brut = await request.body()
-    if len(brut) > 512 * 1024:
+    if len(brut) > MAX_CONFIG:
         raise HTTPException(413, "réglages trop volumineux")
     try:
         recu = json.loads(brut)
@@ -606,6 +655,8 @@ async def api_config_ecrire(cid: str, request: Request):
         raise HTTPException(400, "JSON invalide")
     if not isinstance(recu, dict):
         raise HTTPException(400, "objet attendu")
+    if recu.get("core") and recu["core"] not in coeurs_connus(c):
+        raise HTTPException(400, "cœur inconnu pour cette console")
     config = lire_config(cid)
     for cle in ("controls", "options", "volume", "manettes", "raccourcis", "core"):
         if cle in recu:
@@ -635,7 +686,10 @@ def lire_reglages() -> dict:
         # raccourcis dans le menu d'une console : Select + L1 / R1 / Start
         "manette": {"modificateur": 8, "sauver": 4, "charger": 5, "menu": 9},
     }
-    base.update(lire_json(CONFIG / "reglages.json", {}))
+    perso = lire_json(CONFIG / "reglages.json", {})
+    if isinstance(perso, dict):
+        base.update(perso)
+    base["emulatorjs"] = base.get("emulatorjs") or CDN_DEFAUT   # jamais vide
     return base
 
 
@@ -684,14 +738,14 @@ def api_bios_racine(nom: str):
     « neogeo.zip » produit le fichier que FBNeo cherche. Déclarée en dernier,
     cette route ne masque ni la page ni /api ni /static."""
     for c in CONSOLES:
-        p = dossier_bios(c["id"])
+        p = fichier_bios(c["id"])
         if p and p.name == nom:
             return FileResponse(p, media_type="application/octet-stream", filename=p.name)
     raise HTTPException(404, "introuvable")
 
 
 @app.exception_handler(404)
-def page_404(request: Request, exc):
+def page_404(request: Request, _exc):
     if request.url.path.startswith(("/api/", "/static/")):
         return JSONResponse({"erreur": "introuvable"}, status_code=404)
     return page_accueil()
@@ -702,7 +756,6 @@ def page_404(request: Request, exc):
 # --------------------------------------------------------------------------- #
 
 def main() -> None:
-    import sys
     if "--info" in sys.argv:
         print(f"ROM        : {ROMS}  ({'présent' if ROMS.is_dir() else 'ABSENT'})")
         print(f"Sauvegardes: {SAVES}")

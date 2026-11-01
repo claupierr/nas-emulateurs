@@ -10,6 +10,20 @@ const PLAYER = (() => {
   "use strict";
 
   const $ = (s) => document.querySelector(s);
+  const { h } = EMU;
+  const NB_ENTREES = 24;      // entrées 0 à 23 d'EmulatorJS (boutons, croix, sticks)
+  const MAX_CODES = 100;      // même limite que le serveur (MAX_CODES de app.py)
+
+  // Pour EmulatorJS, le clavier seul : les manettes passent par le pont de ce
+  // fichier, qui calibre leurs axes (value2 vidé, voir pontManettes).
+  function clavierSeul(controles) {
+    const copie = JSON.parse(JSON.stringify(controles));
+    for (const j in copie) {
+      for (const i in copie[j]) copie[j][i].value2 = "";
+    }
+    return copie;
+  }
+
   const partie = {
     cid: null, jid: null, titre: "", slot: 1,
     demarre: false, menuOuvert: false,
@@ -28,7 +42,8 @@ const PLAYER = (() => {
 
   /* ------------------------------------------------------------ lancement */
 
-  async function lancer({ donnees, slot, charger, coeur }) {
+  // « charger » : true si l'emplacement contient un état à restaurer.
+  async function lancer({ donnees, slot, charger: aCharger, coeur }) {
     const c = donnees.console, jeu = donnees.jeu;
     // « coeur » : cœur imposé pour cette partie seulement (sauvegarde enregistrée
     // avec un autre cœur). Le réglage de la console n'est pas modifié.
@@ -59,8 +74,7 @@ const PLAYER = (() => {
     $("#sur-aide").innerHTML = texteAide();
 
     const config = donnees.config || {};
-    const base = (donnees.reglages.emulatorjs || "https://cdn.emulatorjs.org/stable/data/")
-      .replace(/\/?$/, "/");
+    const base = donnees.reglages.emulatorjs.replace(/\/?$/, "/");   // jamais vide (serveur)
 
     window.EJS_player = "#game";
     window.EJS_core = core;
@@ -82,17 +96,10 @@ const PLAYER = (() => {
     window.EJS_backgroundColor = "#000";
     window.EJS_disableLocalStorage = true;          // les réglages viennent du serveur
     window.EJS_volume = typeof config.volume === "number" ? config.volume : 0.5;
-    partie.controles = config.controls || EMU.controlesParDefaut();
-    partie.manettesJoueurs = config.manettes || ["", "", "", ""];
-    partie.raccourcis = config.raccourcis || {};
+    prendreReglages(config);
     // EmulatorJS lit les axes sans tenir compte de leur position de repos, ce qui
-    // bloque une direction sur les manettes HID. On ne lui laisse que le clavier
-    // (value2 vidé) : les manettes passent par le pont plus bas, qui les calibre.
-    const clavierSeul = JSON.parse(JSON.stringify(partie.controles));
-    for (const j in clavierSeul) {
-      for (const i in clavierSeul[j]) clavierSeul[j][i].value2 = "";
-    }
-    window.EJS_defaultControls = clavierSeul;
+    // bloque une direction sur les manettes HID : on ne lui laisse que le clavier.
+    window.EJS_defaultControls = clavierSeul(partie.controles);
     // « menu-bar-button » est le bouton à trois barres d'EmulatorJS, en haut à
     // droite : il ouvre SA barre d'outils, que nous gardons cachée hors du menu.
     // On le masque donc, et le bouton #btn-menu-tactile ouvre la surimpression.
@@ -140,23 +147,23 @@ const PLAYER = (() => {
       } catch (e) { console.warn("préparation du jeu", e); }
       // Codes de triche activés lors d'une partie précédente. EmulatorJS vient
       // de vider la liste du cœur (updateCheatUI) juste avant cet événement.
-      if (partie.codes.some((c) => c.actif)) {
+      const n = partie.codes.filter((k) => k.actif).length;
+      if (n) {
         appliquerCodes();
-        const n = partie.codes.filter((c) => c.actif).length;
         EMU.message(`${n} code${n > 1 ? "s" : ""} de triche actif${n > 1 ? "s" : ""}`);
       }
       // L'état est chargé APRÈS le démarrage, et non pendant (EJS_loadStateURL) :
       // un état refusé par le cœur bloquait sinon le lancement, sans message.
       // Le voile est reposé ici : le filet de sécurité repart du démarrage réel,
       // et le son peut enfin être coupé (l'émulateur n'existait pas avant).
-      if (charger) { voile(true); chargerAuDemarrage(slot); }
+      if (aCharger) { voile(true); chargerAuDemarrage(slot); }
       else EMU.message("Bonne partie");
     };
 
     // L'état est demandé AU PLUS TÔT, en parallèle du téléchargement du cœur :
     // il est ainsi prêt à l'instant du démarrage, sans latence réseau visible.
-    partie.etatPromis = charger ? lireEtat(slot) : null;
-    if (charger) voile(true);
+    partie.etatPromis = aCharger ? lireEtat(slot) : null;
+    if (aCharger) voile(true);
 
     surveillerDemarrage();
 
@@ -173,10 +180,10 @@ const PLAYER = (() => {
     EMU.etat.surPad = surPad;
   }
 
-  // Au lancement, l'état est appliqué puis RÉAPPLIQUÉ une seconde après : dans la
+  // Au lancement, l'état est appliqué puis RÉAPPLIQUÉ 900 ms après : dans la
   // première seconde, le cœur termine son initialisation et peut écraser l'état
   // tout juste chargé — le jeu repart alors du début sans la moindre erreur.
-  // Réappliquer le même état est sans effet visible si le premier essai a réussi.
+  // Les deux sauts se font derrière le voile, donc sans rien montrer à l'écran.
   async function chargerAuDemarrage(slot) {
     const donnees = await (partie.etatPromis || lireEtat(slot));
     partie.etatPromis = null;
@@ -187,9 +194,6 @@ const PLAYER = (() => {
     }
     partie.slot = slot; majSlot();
     appliquerEtat(donnees, "1er essai");
-    // Deuxième application : dans la première seconde, le cœur termine son
-    // initialisation et peut écraser l'état tout juste chargé. Les deux sauts se
-    // font derrière le voile, donc sans rien montrer à l'écran.
     setTimeout(() => {
       appliquerEtat(donnees, "2e essai");
       setTimeout(() => voile(false), 150);
@@ -271,13 +275,12 @@ const PLAYER = (() => {
     const r = partie.raccourcis || {};
     const dit = (a) => {
       const c = (r[a] || {}).value, g = (r[a] || {}).value2;
-      return [c ? c.toUpperCase() : null, g || null].filter(Boolean).join(" ou ") || "non affecté";
+      return h([c ? c.toUpperCase() : null, g || null].filter(Boolean).join(" ou ") || "non affecté");
     };
     return `Sauvegarde rapide : <b>${dit("sauver")}</b> · chargement rapide : <b>${dit("charger")}</b> ·
-      menu : <b>${dit("menu")}</b>, ou la souris amenée sur un bord de l'écran.
+      menu : <b>${dit("menu")}</b>, ou un mouvement de souris.
       Touches et boutons se règlent par le bouton « Manettes et touches ».`;
   }
-
 
   function majSlot() {
     $("#sur-slot").textContent = `Emplacement courant : ${partie.slot}`;
@@ -348,7 +351,7 @@ const PLAYER = (() => {
         if (image) {
           await fetch(`/api/image/${partie.cid}/${partie.jid}/${slot}`, {
             method: "PUT", headers: { "Content-Type": "image/png" }, body: image,
-          });
+          }).then(verifier);
         }
       } catch (e) { console.warn("vignette non enregistrée", e); }
 
@@ -568,18 +571,14 @@ const PLAYER = (() => {
   // EmulatorJS n'accepte une manette que s'il a réussi à l'attribuer à un joueur,
   // ce que ses manettes HID génériques ne déclenchent pas toujours. On lit donc
   // les manettes ici et on transmet les entrées nous-mêmes, d'après le mappage
-  // de la console. Les joueurs suivent l'ordre où le navigateur voit les manettes.
+  // de la console ; le périphérique de chaque joueur est donné par padDuJoueur.
   const ANALOGIQUES = [16, 17, 18, 19, 20, 21, 22, 23];
-  const BOUTONS_PAD = ["BUTTON_1", "BUTTON_2", "BUTTON_3", "BUTTON_4",
-    "LEFT_TOP_SHOULDER", "RIGHT_TOP_SHOULDER", "LEFT_BOTTOM_SHOULDER",
-    "RIGHT_BOTTOM_SHOULDER", "SELECT", "START", "LEFT_STICK", "RIGHT_STICK",
-    "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"];
-  const AXES_PAD = ["LEFT_STICK_X", "LEFT_STICK_Y", "RIGHT_STICK_X", "RIGHT_STICK_Y"];
+  const { BOUTONS_PAD, AXES_PAD } = EMU;   // libellés communs avec le mappage
 
   // Position de repos de chaque manette, relevée à la première lecture.
   function repos(p) {
     let r = partie.repos[p.index];
-    if (!r) { r = p.axes.map((a) => a); partie.repos[p.index] = r; }
+    if (!r) { r = [...p.axes]; partie.repos[p.index] = r; }
     return r;
   }
 
@@ -598,7 +597,7 @@ const PLAYER = (() => {
     if (i < 0 && etiquette.startsWith("GAMEPAD_")) i = parseInt(etiquette.slice(8), 10);
     const b = p.buttons[i];
     if (i < 0 || !b) return 0;
-    return (b.pressed || b.value > 0.5) ? 1 : 0;
+    return EMU.appuye(b) ? 1 : 0;
   }
 
   // Remet toutes les entrées à zéro : au démarrage, à la mise en pause, et quand
@@ -607,7 +606,7 @@ const PLAYER = (() => {
     const gm = gestionnaire();
     if (!gm || typeof gm.simulateInput !== "function") return;
     for (let joueur = 0; joueur < 4; joueur++) {
-      for (let j = 0; j <= 23; j++) {
+      for (let j = 0; j < NB_ENTREES; j++) {
         if (partie.envoye[`${joueur}:${j}`] === 0) continue;
         partie.envoye[`${joueur}:${j}`] = 0;
         try { gm.simulateInput(joueur, j, 0); } catch (e) { /* bouton absent du cœur */ }
@@ -626,7 +625,7 @@ const PLAYER = (() => {
       const mappage = partie.controles[joueur] || {};
       for (const cle in mappage) {
         const j = Number(cle);
-        if (j > 23) continue;
+        if (j >= NB_ENTREES) continue;
         const analogique = ANALOGIQUES.includes(j);
         const brut = enPause ? 0 : valeurEntree(p, mappage[cle].value2);
         const valeur = analogique ? Math.round(0x7fff * brut) : (brut ? 1 : 0);
@@ -667,7 +666,7 @@ const PLAYER = (() => {
         const etiquette = (r[nom] || {}).value2;
         if (!etiquette) continue;
         affecte = true;
-        edge(`${p.index}-${nom}`, valeurEntree(p, etiquette) > 0, actions[nom]);
+        front(`${p.index}-${nom}`, valeurEntree(p, etiquette) > 0, actions[nom]);
       }
     }
     if (affecte) return;
@@ -675,15 +674,16 @@ const PLAYER = (() => {
     const m = partie.reglages.manette;
     for (const p of pads) {
       if (!p.buttons[m.modificateur]?.pressed) continue;
-      edge(`${p.index}-sauver`, p.buttons[m.sauver]?.pressed, actions.sauver);
-      edge(`${p.index}-charger`, p.buttons[m.charger]?.pressed, actions.charger);
-      edge(`${p.index}-menu`, p.buttons[m.menu]?.pressed, actions.menu);
+      front(`${p.index}-sauver`, p.buttons[m.sauver]?.pressed, actions.sauver);
+      front(`${p.index}-charger`, p.buttons[m.charger]?.pressed, actions.charger);
+      front(`${p.index}-menu`, p.buttons[m.menu]?.pressed, actions.menu);
       return;
     }
     partie.boutons.clear();
   }
 
-  function edge(cle, actif, action) {
+  // Front montant : l'action part une fois par appui, pas à chaque image.
+  function front(cle, actif, action) {
     if (actif && !partie.boutons.has(cle)) { partie.boutons.add(cle); action(); }
     if (!actif) partie.boutons.delete(cle);
   }
@@ -803,10 +803,6 @@ const PLAYER = (() => {
     neogeo: "les cœurs arcade gèrent mal les codes saisis à la main",
   };
 
-  const SVG_EFFACER = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 '
-    + '0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
-  const h = (t) => String(t).replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
   function dessinerCodes(focusSur) {
     const liste = $("#codes-liste");
@@ -818,7 +814,7 @@ const PLAYER = (() => {
             <span class="code-valeur">${h(c.code)}</span></span>
         </button>
         <button class="icone code-effacer nav" data-effacer="${i}" aria-label="Supprimer ${h(c.nom)}"
-                title="Supprimer">${SVG_EFFACER}</button>
+                title="Supprimer">${EMU.SVG_POUBELLE}</button>
       </div>`).join("")
       : `<p class="vide">Aucun code pour ce jeu. Ajoutez-en un ci-dessous.</p>`;
 
@@ -841,12 +837,11 @@ const PLAYER = (() => {
           texte: `« ${partie.codes[i].nom} » (${partie.codes[i].code}) sera retiré de ce jeu.`,
           valider: "Supprimer",
         });
-        if (oui) {
-          partie.codes.splice(i, 1);
-          appliquerCodes();
-          majBoutonCodes();
-          await enregistrerCodes();
-        }
+        if (!oui) return;          // le focus est déjà revenu sur la corbeille
+        partie.codes.splice(i, 1);
+        appliquerCodes();
+        majBoutonCodes();
+        await enregistrerCodes();
         dessinerCodes();
       });
     });
@@ -861,7 +856,7 @@ const PLAYER = (() => {
     // par code, ou des « + », pour plusieurs codes formant un même effet.
     const code = $("#code-code").value.trim().toUpperCase().replace(/\s*[\r\n]+\s*/g, "+");
     if (!code) { EMU.message("Saisissez un code", true); $("#code-code").focus(); return; }
-    if (partie.codes.length >= 100) { EMU.message("100 codes au plus par jeu", true); return; }
+    if (partie.codes.length >= MAX_CODES) { EMU.message(`${MAX_CODES} codes au plus par jeu`, true); return; }
     partie.codes.push({ nom: nom || code, code, actif: true });
     appliquerCodes();
     majBoutonCodes();
@@ -915,20 +910,20 @@ const PLAYER = (() => {
     EMU.focusPremier($("#surimpression"));
   });
 
+  // Réglages de la console reçus du serveur : au lancement, puis après le mappage.
+  function prendreReglages(config) {
+    partie.controles = config.controls || EMU.controlesParDefaut();
+    partie.manettesJoueurs = config.manettes || EMU.manettesAuto();
+    partie.raccourcis = config.raccourcis || {};
+  }
+
   // Après un passage par le mappage : nouveau réglage pour le pont manette, et
   // nouveau clavier pour EmulatorJS (qui attend des codes de touches, pas des noms).
   async function rechargerReglages() {
     try {
-      const config = await EMU.api(`/api/config/${partie.cid}`);
-      partie.controles = config.controls || EMU.controlesParDefaut();
-      partie.manettesJoueurs = config.manettes || ["", "", "", ""];
-      partie.raccourcis = config.raccourcis || {};
-      const clavierSeul = JSON.parse(JSON.stringify(partie.controles));
-      for (const j in clavierSeul) {
-        for (const i in clavierSeul[j]) clavierSeul[j][i].value2 = "";
-      }
+      prendreReglages(await EMU.api(`/api/config/${partie.cid}`));
       const e = emu();
-      e.controls = clavierSeul;
+      e.controls = clavierSeul(partie.controles);
       if (typeof e.setupKeys === "function") e.setupKeys();
       partie.repos = {};
       relacherTout();
@@ -942,7 +937,7 @@ const PLAYER = (() => {
       texte: "La partie en cours est perdue si elle n'a pas été sauvegardée dans un emplacement.",
       valider: "Quitter",
     });
-    if (oui) quitter(); else EMU.focusPremier($("#surimpression"));
+    if (oui) quitter();
   });
 
   // Les réglages du menu contextuel d'EmulatorJS (image, shader, volume…) sont
@@ -972,10 +967,9 @@ const PLAYER = (() => {
 
   window.addEventListener("beforeunload", enregistrerOptions);
 
+  // Interface utilisée par app.js ; « controles » sert à diag.js (lecture seule).
   return {
-    lancer, basculerMenu, sauver, charger, quitter,
-    // lecture seule, pour la boîte à outils de diagnostic (diag.js)
+    lancer, basculerMenu,
     get controles() { return partie.controles; },
-    get partie() { return partie; },
   };
 })();

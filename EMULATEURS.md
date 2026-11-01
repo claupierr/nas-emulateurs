@@ -3,7 +3,7 @@
 > Fichier de référence du projet, à la racine de `/srv/data/server/emulateurs/`.
 > Le fichier général `server/CONTEXTE-SERVEUR-nas.md` n'en garde qu'un résumé.
 > **Le système réel fait foi** : en cas de doute, vérifier et corriger ce fichier.
-> Dernière mise à jour : **27/10/2026**.
+> Dernière mise à jour : **01/11/2026**.
 
 ---
 
@@ -28,13 +28,15 @@ seule** ; rien n'est jamais écrit dans `Documents/`.
 
 Une extension absente de ce tableau n'apparaît **pas** dans la bibliothèque, pas plus qu'un fichier dont le nom
 commence par un point. Les dossiers sont parcourus **récursivement** : un jeu rangé dans un sous-dossier est
-quand même listé, sous le nom de son fichier. Pour le Neo Geo, `neogeo.zip`, `pgm.zip` et `decrypted.zip` sont
-écartés de la liste : ce sont des fichiers système, pas des jeux.
+quand même listé, sous le nom de son fichier. Pour le Neo Geo, `neogeo.zip`, `neogeo.7z`, `pgm.zip` et
+`decrypted.zip` sont écartés de la liste : ce sont des fichiers système, pas des jeux. Le BIOS servi au cœur est
+`neogeo.zip`, à défaut `neogeo.7z` (clé `bios` de la console dans `app.py`), jamais un autre fichier système.
 
 **Trouver le dossier d'une console** — par ordre de priorité : la variable `EMU_ROMS_<CONSOLE>` du `.env`, puis
 `config/dossiers.json` (`{"neogeo": "F-NEOGEO"}`, à créer à la main si besoin), puis la reconnaissance
 automatique par le nom du dossier (jetons `NES`, `SNES`, `MEGADRIVE`… et motifs `SUPERNINTENDO`,
-`SEGAGENESIS`…). Un `..` glissé dans `dossiers.json` ne permet pas de sortir de `EMU_ROMS`.
+`SEGAGENESIS`…). Un `..` glissé dans `dossiers.json` ne permet pas de sortir de `EMU_ROMS`. L'association est
+gardée en cache **45 s**, comme l'inventaire : une modification de `dossiers.json` s'applique dans ce délai.
 
 ---
 
@@ -87,8 +89,9 @@ uvicorn, donc changer de port demande d'éditer l'unité systemd.
 **Accueil** une vignette par console. **Bibliothèque** : *Mes jeux* (ceux qui ont une sauvegarde, en
 vignettes tirées du dernier état) puis *Autres jeux* en liste compacte ; recherche en tapant ; sélecteur de
 cœur valable pour toute la console ; bouton « Manettes et touches ». **Emplacements** : six par jeu, un
-emplacement libre démarre une partie neuve ; un emplacement occupé peut être **supprimé** (état, vignette et
-cœur partent ensemble).
+emplacement libre démarre une partie neuve ; un emplacement occupé peut être **supprimé**, toujours
+après **confirmation** (état, vignette et cœur partent ensemble ; « Annuler » a le focus, Échap ne ferme
+que la confirmation). Écraser un emplacement en sauvegardant ne demande pas de confirmation.
 
 **Plein écran** : demandé **au lancement** du jeu, sur la page entière. Le navigateur ne l'accorde qu'après
 un geste de l'utilisateur : choix de l'emplacement à la souris ou au clavier, oui ; à la **manette**, ou lors
@@ -157,7 +160,10 @@ seconde application. Filet de sécurité : le voile se lève dans tous les cas a
 Garde-fous du serveur : un état est refusé au-delà de **96 Mo**, une vignette au-delà de **4 Mo**, un fichier
 de réglages au-delà de **512 ko**, une liste de codes au-delà de **100 codes** ou **64 ko** (nom limité à 120
 caractères, code à 1000, caractères de contrôle remplacés par `+`) ; l'identifiant doit être 16 caractères hexadécimaux et le numéro
-d'emplacement compris entre 1 et `EMU_SLOTS`.
+d'emplacement compris entre 1 et `EMU_SLOTS` (un `slot9.state` resté d'un réglage plus large est ignoré). Le
+cœur choisi pour une console doit figurer dans sa liste (section 1) : refusé à l'enregistrement, écarté à la
+lecture s'il a été écrit à la main. Un fichier JSON abîmé dans `config/` ou `saves/` est remplacé par les
+valeurs d'origine et signalé dans le journal du service (`journalctl -u emulateurs-web`).
 
 Les sauvegardes « pile » internes aux jeux (SRAM) restent dans le navigateur, pas sur le serveur.
 
@@ -240,7 +246,8 @@ les consoles :
   "manette": { "modificateur": 8, "sauver": 4, "charger": 5, "menu": 9 }
 }
 ```
-— la source d'EmulatorJS (`/static/emulatorjs/data/` pour une copie locale, si le CDN venait à manquer) et la
+— la source d'EmulatorJS (`/static/emulatorjs/data/` pour une copie locale, si le CDN venait à manquer ; vide =
+CDN) et la
 combinaison manette de repli (Select + L1 / R1 / Start) employée tant qu'aucun bouton n'a été affecté aux
 raccourcis d'une console.
 

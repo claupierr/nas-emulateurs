@@ -20,8 +20,18 @@ const EMU = (() => {
     surPad: null,        // crochet posé par player.js : manettes et raccourcis
     manettes: [],        // manettes connues, établies à la demande seulement
     capture: null,       // écoute d'une touche ou d'un bouton, page de mappage
-    controles: null,     // mappage de la console en cours de réglage
+    // page de mappage (ou fenêtre de mappage en jeu)
+    controles: null,     // touches et boutons de la console en cours de réglage
+    manettesJoueurs: null, // périphérique choisi pour chaque joueur
+    raccourcis: null,    // sauvegarde et chargement rapides
+    modifie: false,      // modifications non enregistrées
+    mapJoueur: 0,        // onglet de joueur affiché
+    // fermeture de la fenêtre ouverte, pour Échap et le bouton B de la manette
+    fermerMappage: null, fermerConfirmation: null, fermerTriche: null, fermerDialogue: null,
   };
+
+  // Aucun périphérique imposé : les quatre joueurs suivent l'ordre de branchement.
+  const manettesAuto = () => ["", "", "", ""];
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -111,7 +121,7 @@ const EMU = (() => {
   }
 
   const SVG_DISQUETTE = `<svg viewBox="0 0 24 24"><path d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4zm-5 16a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm3-10H6V5h9v4z"/></svg>`;
-  const SVG_POUBELLE = `<svg viewBox="0 0 24 24"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
+  const SVG_POUBELLE = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>`;
 
   /* --------------------------------------------------- touches et manettes */
 
@@ -181,7 +191,7 @@ const EMU = (() => {
   };
 
   // Deux entrées en bas du tableau, communes aux quatre joueurs (le menu reste
-  // sur Échap, Select + Start, ou la souris au bord de l'écran).
+  // sur Échap, sur la combinaison manette de repli, ou sur la souris).
   const RACCOURCIS = [["sauver", "Sauvegarde rapide"], ["charger", "Chargement rapide"]];
 
   // Illustrations des manettes, dans static/img/ (le nom de fichier ne suit pas
@@ -191,23 +201,30 @@ const EMU = (() => {
     megadrive: "MegaDrive.jpg", n64: "N64.jpg", neogeo: "NEOGEO.jpg",
   };
 
+  // Texte d'une case du tableau de mappage : « — » quand rien n'est affecté.
+  const libelle = (v) => (v === undefined || v === null || v === "" ? "—" : String(v));
+
   function celluleRaccourci(cle, colonne) {
-    const v = ((etat.raccourcis || {})[cle] || {})[colonne];
-    const texte = v === undefined || v === "" || v === null ? "—" : String(v);
+    const texte = libelle(((etat.raccourcis || {})[cle] || {})[colonne]);
     return `<button class="cellule nav ${texte === "—" ? "vide" : ""}"
       data-raccourci="${cle}" data-colonne="${colonne}">${h(texte)}</button>`;
+  }
+
+  // Réglages d'une console tels que renvoyés par le serveur (lecture, après
+  // enregistrement, ou après retour à l'origine) : seule porte d'entrée.
+  function chargerReglages(config) {
+    etat.controles = config.controls || controlesParDefaut();
+    etat.manettesJoueurs = config.manettes || manettesAuto();
+    etat.raccourcis = config.raccourcis || {};
+    etat.modifie = false;
   }
 
   async function pageMappage(cid) {
     const donnees = await api("/api/consoles");
     const c = donnees.consoles.find((x) => x.id === cid);
     if (!c) throw new Error("console inconnue");
-    const config = await api(`/api/config/${cid}`);
+    chargerReglages(await api(`/api/config/${cid}`));
     etat.console = c;
-    etat.controles = config.controls || controlesParDefaut();
-    etat.manettesJoueurs = config.manettes || ["", "", "", ""];
-    etat.raccourcis = config.raccourcis || {};
-    etat.modifie = false;
     document.documentElement.style.setProperty("--accent", c.couleur);
     majBarre({ titre: `Manettes — ${c.nom}`, retour: true, recherche: false });
     majAide([
@@ -289,11 +306,7 @@ const EMU = (() => {
             raccourcis: etat.raccourcis }),
         });
         // Relecture : on affiche ce que le serveur a réellement conservé.
-        const relu = await api(`/api/config/${cid}`);
-        etat.controles = relu.controls || controlesParDefaut();
-        etat.manettesJoueurs = relu.manettes || ["", "", "", ""];
-        etat.raccourcis = relu.raccourcis || {};
-        etat.modifie = false;
+        chargerReglages(await api(`/api/config/${cid}`));
         dessinerMappage(cid, joueur, cible);
         message("Réglages enregistrés");
       } catch (e) { message(`Enregistrement impossible : ${e.message}`, true); }
@@ -306,7 +319,7 @@ const EMU = (() => {
              + "Utile quand une manette n'est pas reconnue comme joueur 1. Le clavier n'est pas touché.",
         valider: "Copier",
       });
-      if (!oui) { EMU.focusPremier(zone); return; }
+      if (!oui) return;
       for (let j = 0; j < 4; j++) {
         if (j === joueur) continue;
         for (const i in etat.controles[joueur]) {
@@ -326,12 +339,12 @@ const EMU = (() => {
         valider: "Rétablir",
       });
       if (!oui) return;
-      const remis = await api(`/api/config/${cid}`, { method: "DELETE" });
-      etat.controles = controlesParDefaut();
-      etat.manettesJoueurs = (remis && remis.manettes) || ["", "", "", ""];
-      etat.modifie = false;
-      dessinerMappage(cid, joueur, cible);
-      message("Réglages d'origine rétablis");
+      try {
+        // Le serveur renvoie les réglages d'origine : raccourcis compris.
+        chargerReglages(await api(`/api/config/${cid}`, { method: "DELETE" }));
+        dessinerMappage(cid, joueur, cible);
+        message("Réglages d'origine rétablis");
+      } catch (e) { message(`Retour à l'origine impossible : ${e.message}`, true); }
     });
     focusPremier(zone);
   }
@@ -347,13 +360,12 @@ const EMU = (() => {
     if (!pads.length) return auto + `<option disabled>aucun périphérique connu : rafraîchir</option>`;
     return auto + pads.map((p) => {
       const cle = `${p.id}_${p.index}`;
-      return `<option value="${cle.replace(/"/g, "&quot;")}"${cle === choisi ? " selected" : ""}>${h(p.id)}</option>`;
+      return `<option value="${h(cle)}"${cle === choisi ? " selected" : ""}>${h(p.id)}</option>`;
     }).join("");
   }
 
   function celluleHtml(joueur, index, colonne) {
-    const v = (etat.controles[joueur] && etat.controles[joueur][index] || {})[colonne];
-    const texte = v === undefined || v === "" || v === null ? "—" : String(v);
+    const texte = libelle(((etat.controles[joueur] || {})[index] || {})[colonne]);
     return `<button class="cellule nav ${texte === "—" ? "vide" : ""}"
       data-joueur="${joueur}" data-index="${index}" data-colonne="${colonne}">${h(texte)}</button>`;
   }
@@ -395,9 +407,9 @@ const EMU = (() => {
     etat.capture = null;
     if (c && remettre) {
       c.el.classList.remove("ecoute");
-      const v = valeurCapturee(c);
-      c.el.textContent = v === undefined || v === "" ? "—" : String(v);
-      c.el.classList.toggle("vide", !v);
+      const texte = libelle(valeurCapturee(c));
+      c.el.textContent = texte;
+      c.el.classList.toggle("vide", texte === "—");
     }
   }
 
@@ -429,9 +441,13 @@ const EMU = (() => {
     }
   }
 
+  // Le tableau de mappage est affiché, en page (#/m/…) ou par-dessus un jeu.
+  const mappageAffiche = () => !$("#mappage").hidden || (location.hash || "").startsWith("#/m/");
+  const zoneMappage = () => (!$("#mappage").hidden ? $("#mappage-contenu") : vue);
+
   function marquerModifie() {
     etat.modifie = true;
-    const zone = !$("#mappage").hidden ? $("#mappage-contenu") : vue;
+    const zone = zoneMappage();
     const b = zone.querySelector("#enregistrer");
     if (b) { b.disabled = false; b.textContent = "Enregistrer les modifications"; }
   }
@@ -439,11 +455,7 @@ const EMU = (() => {
   // Mappage ouvert par-dessus une partie mise en pause. Renvoie une promesse
   // résolue à la fermeture, pour que le lecteur recharge les réglages.
   async function ouvrirMappage(cid) {
-    const config = await api(`/api/config/${cid}`);
-    etat.controles = config.controls || controlesParDefaut();
-    etat.manettesJoueurs = config.manettes || ["", "", "", ""];
-    etat.raccourcis = config.raccourcis || {};
-    etat.modifie = false;
+    chargerReglages(await api(`/api/config/${cid}`));
     const boite = $("#mappage");
     dessinerMappage(cid, 0, $("#mappage-contenu"));
     boite.hidden = false;
@@ -469,9 +481,12 @@ const EMU = (() => {
 
   /* --------------------------------------------------------- confirmation */
 
+  // Le focus revient à l'élément qui l'avait à l'ouverture (bouton qui a
+  // demandé la confirmation) ; l'appelant peut le déplacer ensuite.
   function confirmer({ titre, texte, valider }) {
     return new Promise((resoudre) => {
       const boite = $("#confirmation");
+      const avant = document.activeElement;
       $("#confirmation-titre").textContent = titre;
       $("#confirmation-texte").textContent = texte || "";
       $("#confirmation-oui").textContent = valider || "Confirmer";
@@ -481,6 +496,9 @@ const EMU = (() => {
         boite.hidden = true;
         document.removeEventListener("keydown", surTouche, true);
         etat.fermerConfirmation = null;
+        if (avant && avant.isConnected && typeof avant.focus === "function") {
+          avant.focus({ preventScroll: true });
+        }
         resoudre(v);
       };
       const surTouche = (ev) => {
@@ -523,7 +541,7 @@ const EMU = (() => {
     const sansJeu = etat.consoles.every((c) => c.jeux === 0);
     vue.innerHTML = `
       <div class="entete-console">
-        <p class="secondaire">${donnees.racine}</p>
+        <p class="secondaire">${h(donnees.racine)}</p>
       </div>
       <div class="consoles">
         ${etat.consoles.map((c) => `
@@ -640,7 +658,24 @@ const EMU = (() => {
         resoudre(valeur);
       }
       function choisir(n) { fermer(n); }
+      // Effacer un emplacement est définitif (état, vignette et cœur) : on le
+      // fait toujours confirmer. « Annuler » a le focus par défaut, si bien
+      // qu'un appui distrait (Entrée, bouton A) ne supprime rien.
       async function effacer(n) {
+        const s = slots.liste.find((x) => x.slot === n);
+        const oui = await confirmer({
+          titre: `Supprimer l'emplacement ${n} ?`,
+          texte: (s && s.date ? `Sauvegarde du ${formatDate(s.date)}. ` : "")
+               + "L'état, sa vignette et le cœur associé sont effacés du serveur. "
+               + "Cette suppression ne peut pas être annulée depuis le site.",
+          valider: "Supprimer",
+        });
+        if (!oui) {
+          // Le focus était sur la corbeille, hors navigation : on le met sur
+          // l'emplacement lui-même.
+          boite.querySelector(`[data-slot="${n}"]`)?.focus({ preventScroll: true });
+          return;
+        }
         try {
           const r = await api(`/api/etat/${slots.cid}/${slots.jid}/${n}`, { method: "DELETE" });
           slots.liste = r.slots;
@@ -650,6 +685,8 @@ const EMU = (() => {
         } catch (e) { message(`Effacement impossible : ${e.message}`, true); }
       }
       function surEchap(ev) {
+        // Confirmation de suppression ouverte par-dessus : Échap ne ferme qu'elle.
+        if (!$("#confirmation").hidden) return;
         if (ev.key === "Escape") { ev.stopPropagation(); ev.preventDefault(); fermer(null); }
       }
       document.addEventListener("keydown", surEchap, true);
@@ -663,14 +700,13 @@ const EMU = (() => {
     const { autoriserVide, effacable, coeur, bloquer } = options;
     const conteneur = $("#slots");
     conteneur.innerHTML = slots.liste.map((s) => {
-      // Un état n'est relisible que par le cœur qui l'a écrit.
       // Un état n'est relisible que par le cœur qui l'a écrit. Au lancement d'un
       // jeu, on bascule sur ce cœur (cf. demarrer) ; en cours de partie, le cœur
       // est déjà compilé et ne peut plus changer : l'emplacement est alors refusé.
       const incompatible = !s.vide && coeur && s.core && s.core !== coeur;
       const actif = (autoriserVide || !s.vide) && !(incompatible && bloquer);
-      const etat = s.vide ? "libre"
-        : `${formatDate(s.date)}${s.core ? ` · ${s.core}` : " · cœur inconnu"}`;
+      const statut = s.vide ? "libre"
+        : `${formatDate(s.date)}${s.core ? ` · ${h(s.core)}` : " · cœur inconnu"}`;
       return `<button class="slot nav ${incompatible ? "incompatible" : ""}" data-slot="${s.slot}"
           ${actif ? "" : "disabled"}>
         <span class="apercu" ${s.image ? `style="background-image:url('${s.image}')"` : ""}>
@@ -678,7 +714,7 @@ const EMU = (() => {
         </span>
         <span class="infos">
           <strong>Emplacement ${s.slot}</strong>
-          <p class="secondaire">${etat}</p>
+          <p class="secondaire">${statut}</p>
           ${incompatible ? (bloquer
               ? `<p class="alerte">illisible avec le cœur ${h(coeur)}</p>`
               : `<p class="avis">lancera le cœur ${h(s.core)}</p>`) : ""}
@@ -847,6 +883,8 @@ const EMU = (() => {
     boutons: new Set(), repos: new Map(), anim: null,
   };
   const ZONE_MORTE = 0.6;
+  // Certaines manettes HID ne lèvent pas « pressed » : on lit aussi la valeur.
+  const appuye = (b) => (typeof b === "object" ? (b.pressed || b.value > 0.5) : b > 0.5);
 
   // Les manettes ne sont PLUS scrutées en permanence : la liste n'est établie
   // qu'à la demande (bouton de rafraîchissement), au chargement de la page, et
@@ -864,9 +902,8 @@ const EMU = (() => {
         ? `${etat.manettes.length} manette${etat.manettes.length > 1 ? "s" : ""} détectée${etat.manettes.length > 1 ? "s" : ""}`
         : "Aucune manette détectée — appuyez sur un bouton puis réessayez");
     }
-    if (!$("#mappage").hidden || (location.hash || "").startsWith("#/m/")) {
-      dessinerMappage(etat.console.id, etat.mapJoueur || 0,
-        !$("#mappage").hidden ? $("#mappage-contenu") : vue);
+    if (mappageAffiche() && etat.console) {
+      dessinerMappage(etat.console.id, etat.mapJoueur || 0, zoneMappage());
     }
   }
 
@@ -913,7 +950,7 @@ const EMU = (() => {
     const pads = padsConnus();
     if (etat.surPad) etat.surPad(pads);
     if (!pads.length) return;
-    if (!$("#mappage").hidden || (location.hash || "").startsWith("#/m/")) temoinManette(pads);
+    if (mappageAffiche()) temoinManette(pads);
     if (etat.capture) { capturerPad(pads); return; }
     const menuVisible = !etat.enJeu || !$("#mappage").hidden || !$("#confirmation").hidden
       || !$("#dialogue").hidden || !$("#surimpression").hidden;
@@ -932,7 +969,7 @@ const EMU = (() => {
       if (p.buttons[0]?.pressed || p.buttons[9]?.pressed) valider = true;
       if (p.buttons[1]?.pressed) retour = true;
     }
-    if (pad.verrou && performance.now() < pad.verrou) return;   // sortie de capture
+    if (pad.verrou && maintenant < pad.verrou) return;   // sortie de capture
     if (dx || dy) {
       // Garde-fou : une direction maintenue plus de 25 crans est tenue pour
       // bloquée (stick usé, adaptateur bavard) et ignorée jusqu'au retour au repos.
@@ -964,7 +1001,7 @@ const EMU = (() => {
       c.base = pads.map((p) => ({
         index: p.index,
         boutons: p.buttons.map(appuye),
-        axes: p.axes.map((a) => a),
+        axes: [...p.axes],
       }));
       return;
     }
@@ -972,7 +1009,6 @@ const EMU = (() => {
       const ref = c.base.find((r) => r.index === p.index);
       if (!ref) continue;
       for (let i = 0; i < p.buttons.length; i++) {
-        // Certaines manettes HID ne lèvent pas « pressed » : on lit aussi la valeur.
         if (appuye(p.buttons[i]) && !ref.boutons[i]) {
           affecter(BOUTONS_PAD[i] !== undefined ? BOUTONS_PAD[i] : `GAMEPAD_${i}`);
           return;
@@ -998,30 +1034,27 @@ const EMU = (() => {
     });
   }
 
-  const appuye = (b) => (typeof b === "object" ? (b.pressed || b.value > 0.5) : b > 0.5);
-
   // Identification : le témoin s'allume quand le périphérique choisi pour le
   // joueur affiché envoie quelque chose. Indispensable quand deux manettes
   // portent le même nom.
   function temoinManette(pads) {
-    const temoin = (!$("#mappage").hidden ? $("#mappage") : vue).querySelector("#temoin");
+    const temoin = zoneMappage().querySelector("#temoin");
     if (!temoin) return;
     const choix = (etat.manettesJoueurs || [])[etat.mapJoueur] || "";
-    let pad = null;
-    if (choix === "none") pad = null;
-    else if (choix) pad = pads.find((p) => `${p.id}_${p.index}` === choix) || null;
-    else pad = pads[etat.mapJoueur] || null;
+    let periph = null;
+    if (choix && choix !== "none") periph = pads.find((p) => `${p.id}_${p.index}` === choix) || null;
+    else if (!choix) periph = pads[etat.mapJoueur] || null;
 
     let actif = false;
-    if (pad) {
-      actif = pad.buttons.some(appuye);
+    if (periph) {
+      actif = periph.buttons.some(appuye);
       if (!actif) {
-        const [ax, ay] = axes(pad);
+        const [ax, ay] = axes(periph);
         actif = Math.abs(ax) > ZONE_MORTE || Math.abs(ay) > ZONE_MORTE;
       }
     }
     temoin.classList.toggle("allume", actif);
-    temoin.textContent = !pad ? (choix === "none" ? "joueur désactivé" : "aucun périphérique pour ce joueur")
+    temoin.textContent = !periph ? (choix === "none" ? "joueur désactivé" : "aucun périphérique pour ce joueur")
       : (actif ? "périphérique actif — c'est celui-là" : "appuyez sur un bouton pour identifier le périphérique");
   }
 
@@ -1035,15 +1068,15 @@ const EMU = (() => {
   async function router() {
     if (etat.enJeu) return;                    // le lecteur gère sa propre sortie
     annulerEcoute(false);
-    const h = location.hash || "#/";
+    const hash = location.hash || "#/";
     try {
-      const mc = h.match(/^#\/c\/([a-z0-9]+)$/);
-      const mm = h.match(/^#\/m\/([a-z0-9]+)$/);
+      const mc = hash.match(/^#\/c\/([a-z0-9]+)$/);
+      const mm = hash.match(/^#\/m\/([a-z0-9]+)$/);
       if (mm) await pageMappage(mm[1]);
       else if (mc) await pageConsole(mc[1]);
       else await pageAccueil();
     } catch (e) {
-      vue.innerHTML = `<p class="vide">Erreur : ${e.message}</p>`;
+      vue.innerHTML = `<p class="vide">Erreur : ${h(e.message)}</p>`;
       message(e.message, true);
     }
   }
@@ -1078,7 +1111,11 @@ const EMU = (() => {
     if (!(await reprendrePartie())) router();
   });
 
-  return { api, message, etat, ouvrirSlots, focusPremier, formatDate, router,
-    majAide, majBarre, confirmer, controlesParDefaut, ouvrirMappage, coeurAutorise,
-    nomTouche: (code) => TOUCHES[code] };
+  // Interface utilisée par player.js (et, pour « etat », par diag.js).
+  return {
+    api, message, etat, h, appuye, ouvrirSlots, focusPremier, confirmer,
+    controlesParDefaut, manettesAuto, ouvrirMappage, coeurAutorise,
+    nomTouche: (code) => TOUCHES[code],
+    BOUTONS_PAD, AXES_PAD, SVG_POUBELLE,
+  };
 })();
