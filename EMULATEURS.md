@@ -1,23 +1,20 @@
-# Site émulateur du serveur « nas »
+# Site émulateur du serveur « nas » (port 8097)
 
-> Fichier de référence du projet, à la racine de `/srv/data/server/emulateurs/`.
-> Le fichier général `server/CONTEXTE-SERVEUR-nas.md` n'en garde qu'un résumé.
-> **Le système réel fait foi** : en cas de doute, vérifier et corriger ce fichier.
-> Dernière mise à jour : **01/11/2026**.
+> Référence du projet, à la racine de `/srv/data/server/emulateurs/` ; dépôt privé
+> `git@github.com:claupierr/nas-emulateurs.git`. Contexte général : `/srv/data/server/admin/CONTEXTE-SERVEUR-nas.md`.
+> **Le système réel fait foi.** Mise à jour : **04/11/2026**.
 
 ---
 
 ## 1. Ce que c'est
 
-Site web joué dans le navigateur, qui donne accès aux ROM de six consoles rétro rangées dans
-`/srv/data/Documents/Emulateurs/`. Page **`http://nas:8097`**, tuile Homepage « Consoles ».
+Six consoles rétro jouées dans le navigateur, ROM rangées dans `/srv/data/Documents/Emulateurs/`. Page
+**`http://nas:8097`**, tuile Homepage « Consoles ». Émulation par **EmulatorJS 4.2.3** (CDN
+`https://cdn.emulatorjs.org/stable/data/`), **entièrement dans le navigateur** : le serveur inventorie les ROM,
+sert les fichiers, garde sauvegardes et réglages. ROM ouvertes **en lecture seule**, rien n'est écrit dans
+`Documents/`.
 
-L'émulation est faite par **EmulatorJS 4.2.3**, chargé du CDN `https://cdn.emulatorjs.org/stable/data/` :
-tout le calcul se passe **dans le navigateur**. Le serveur ne fait que trois choses — inventorier les ROM,
-servir les fichiers, et conserver les sauvegardes et les réglages. Les ROM sont ouvertes **en lecture
-seule** ; rien n'est jamais écrit dans `Documents/`.
-
-| Console | Dossier | Cœur d'origine | Variantes | Extensions reconnues |
+| Console | Dossier | Cœur d'origine | Variantes | Extensions |
 |---|---|---|---|---|
 | NES | `A-NES` | `fceumm` | `nestopia` | `.nes` `.fds` `.unf` `.unif` `.zip` `.7z` |
 | Super NES | `D-SNES` | `snes9x` | `snes9x2010`, `snes9x2005` | `.sfc` `.smc` `.fig` `.swc` `.zip` `.7z` |
@@ -26,17 +23,12 @@ seule** ; rien n'est jamais écrit dans `Documents/`.
 | Nintendo 64 | `E-N64` | `mupen64plus_next` | `parallel_n64` | `.n64` `.z64` `.v64` `.zip` `.7z` |
 | Neo Geo | `F-NEOGEO` | `fbneo` | `mame2003_plus`, `mame2003` | `.zip` `.7z` `.neo` |
 
-Une extension absente de ce tableau n'apparaît **pas** dans la bibliothèque, pas plus qu'un fichier dont le nom
-commence par un point. Les dossiers sont parcourus **récursivement** : un jeu rangé dans un sous-dossier est
-quand même listé, sous le nom de son fichier. Pour le Neo Geo, `neogeo.zip`, `neogeo.7z`, `pgm.zip` et
-`decrypted.zip` sont écartés de la liste : ce sont des fichiers système, pas des jeux. Le BIOS servi au cœur est
-`neogeo.zip`, à défaut `neogeo.7z` (clé `bios` de la console dans `app.py`), jamais un autre fichier système.
-
-**Trouver le dossier d'une console** — par ordre de priorité : la variable `EMU_ROMS_<CONSOLE>` du `.env`, puis
-`config/dossiers.json` (`{"neogeo": "F-NEOGEO"}`, à créer à la main si besoin), puis la reconnaissance
-automatique par le nom du dossier (jetons `NES`, `SNES`, `MEGADRIVE`… et motifs `SUPERNINTENDO`,
-`SEGAGENESIS`…). Un `..` glissé dans `dossiers.json` ne permet pas de sortir de `EMU_ROMS`. L'association est
-gardée en cache **45 s**, comme l'inventaire : une modification de `dossiers.json` s'applique dans ce délai.
+- Autre extension, ou nom commençant par un point : **absent** de la bibliothèque. Parcours **récursif**.
+- Neo Geo : `neogeo.zip`, `neogeo.7z`, `pgm.zip`, `decrypted.zip` écartés (fichiers système) ; BIOS servi :
+  `neogeo.zip`, à défaut `neogeo.7z` (clé `bios` dans `app.py`).
+- **Dossier d'une console**, par priorité : `EMU_ROMS_<CONSOLE>` du `.env`, puis `config/dossiers.json`
+  (`{"neogeo": "F-NEOGEO"}`, écrit à la main), puis reconnaissance par le nom (`NES`, `SNES`, `MEGADRIVE`,
+  `SUPERNINTENDO`, `SEGAGENESIS`…). Un `..` ne sort pas de `EMU_ROMS`. Cache **45 s**, comme l'inventaire.
 
 ---
 
@@ -44,29 +36,18 @@ gardée en cache **45 s**, comme l'inventaire : une modification de `dossiers.js
 
 ```
 /srv/data/server/emulateurs/
-├── EMULATEURS.md        ce fichier
-├── .env                 (600) racines des ROM — lu au DÉMARRAGE du service
-├── .gitignore           · notes.txt (non suivi)  · emulateurs-web.service (copie du service)
+├── EMULATEURS.md · .env (600) · .gitignore · notes.txt (non suivi) · emulateurs-web.service (copie de l'unité)
 ├── web/
-│   ├── app.py           serveur FastAPI : inventaire, fichiers, sauvegardes, réglages
-│   ├── index.html       page unique
-│   └── static/
-│       ├── css/app.css
-│       ├── js/app.js    menus, navigation, page de mappage
-│       ├── js/player.js lecteur : EmulatorJS, surimpression, pont manettes
-│       ├── js/diag.js   outil de diagnostic, chargé à la demande (section 7)
-│       └── img/         illustrations des manettes (NES.jpg, SNES.jpg, GBA.jpg,
-│                        MegaDrive.jpg, N64.jpg, NEOGEO.jpg)
-├── saves/<console>/<id jeu>/slot1-6.state + .png + .json (cœur) + codes.json + jeu.txt
-└── config/<console>.json      écrit par le site (un par console réglée)
-    config/reglages.json       facultatif, écrit à la main (section 6)
-    config/dossiers.json       facultatif, écrit à la main (section 1)
+│   ├── app.py              FastAPI : inventaire, fichiers, sauvegardes, réglages
+│   ├── index.html          page unique
+│   └── static/  css/app.css · js/app.js (menus, mappage) · js/player.js (EmulatorJS, surimpression,
+│                pont manettes) · js/diag.js (diagnostic, à la demande) · img/ (illustrations des manettes)
+├── saves/<console>/<id jeu>/  slot1-6.state + .png + .json (cœur) · codes.json · jeu.txt
+└── config/  <console>.json (écrit par le site) · reglages.json et dossiers.json (facultatifs, à la main)
 ```
+`saves/` et `config/` sont dans le miroir ; l'unité systemd dans l'archive `CONFIGS`.
 
-`saves/` et `config/` sont dans le miroir du mardi ; `/etc/systemd/system/emulateurs-web.service` est dans
-l'archive `CONFIGS` de `nas-backup.sh`, et une copie du fichier d'unité vit aussi à la racine du projet.
-
-### `.env` (600, `pc:pc`)
+### `.env` (600, `pc:pc`) — lu au démarrage du service seulement
 ```
 EMU_ROMS=/srv/data/Documents/Emulateurs
 EMU_ROMS_NES=A-NES
@@ -76,154 +57,98 @@ EMU_ROMS_MEGADRIVE=C-Mega-Drive
 EMU_ROMS_N64=E-N64
 EMU_ROMS_NEOGEO=F-NEOGEO
 ```
-Nom d'un sous-dossier ou chemin absolu ; ligne vide ou absente = reconnaissance par le nom du dossier.
-Sans guillemets, sans commentaire en fin de ligne. **Lu au démarrage du service seulement.**
-Variables facultatives : `EMU_SAVES`, `EMU_CONFIG`, `EMU_SLOTS` (6).
-⚠️ `EMU_PORT` (8097) n'agit **qu'en lancement direct** (`python app.py`) : le service passe `--port 8097` à
-uvicorn, donc changer de port demande d'éditer l'unité systemd.
+Sous-dossier ou chemin absolu ; vide = reconnaissance par le nom. Sans guillemets ni commentaire en fin de ligne.
+Facultatifs : `EMU_SAVES`, `EMU_CONFIG`, `EMU_SLOTS` (6). ⚠️ `EMU_PORT` n'agit qu'en lancement direct : le port du
+service se change dans l'unité systemd (`--port 8097`).
 
 ---
 
 ## 3. Usage
 
-**Accueil** une vignette par console. **Bibliothèque** : *Mes jeux* (ceux qui ont une sauvegarde, en
-vignettes tirées du dernier état) puis *Autres jeux* en liste compacte ; recherche en tapant ; sélecteur de
-cœur valable pour toute la console ; bouton « Manettes et touches ». **Emplacements** : six par jeu, un
-emplacement libre démarre une partie neuve ; un emplacement occupé peut être **supprimé**, toujours
-après **confirmation** (état, vignette et cœur partent ensemble ; « Annuler » a le focus, Échap ne ferme
-que la confirmation). Écraser un emplacement en sauvegardant ne demande pas de confirmation.
-
-**Plein écran** : demandé **au lancement** du jeu, sur la page entière. Le navigateur ne l'accorde qu'après
-un geste de l'utilisateur : choix de l'emplacement à la souris ou au clavier, oui ; à la **manette**, ou lors
-d'une relance automatique après un changement de cœur, non — le jeu démarre alors en fenêtre, sans message.
-
-**En jeu** : le menu s'ouvre par **Échap**, par le raccourci manette, par **300 px de déplacement de souris**
-ou par un clic, et met la partie **en pause**. Sept boutons : Reprendre, Sauvegarder, Charger, Activer /
-Désactiver le lissage (shader SABR), Codes de triche, Manettes et touches, Quitter (confirmation) ; hors
-plein écran, un huitième en tête, **Reprendre en plein écran** (sélectionné d'office : Échap puis Entrée y
-ramènent). Une sortie du plein écran qui ne vient pas du site (Échap, que le navigateur se réserve) ouvre le
-menu. Un clic dans le vide reprend la partie. Le pointeur s'efface 3 s après son dernier mouvement.
-
-**Codes de triche** : une fenêtre propre au jeu lancé liste ses codes, chacun avec un **interrupteur**
-(activé / désactivé, appliqué aussitôt) et un bouton de suppression (confirmation) ; en bas, une description
-et un code pour en ajouter un, activé d'emblée. Les codes sont **conservés sur le serveur avec leur état** et
-réappliqués au lancement suivant, avec un message « n codes de triche actifs » ; le bouton du menu affiche
-leur nombre. Le code est mis en majuscules ; plusieurs codes formant un même effet se séparent par `+`.
-Formats rappelés dans la fenêtre selon la console : Game Genie ou adresse brute `0079:05` (NES), Game Genie
-ou Pro Action Replay (Super NES, Mega Drive), Game Genie ou GameShark (Game Boy), GameShark (N64). Les cœurs
-arcade gèrent mal les codes saisis à la main. Un code que le cœur ne comprend pas est ignoré **sans message**.
-
-**Sur écran tactile** (téléphone, tablette) : ni Échap ni souris, le menu s'ouvre par le **bouton à trois
-barres en haut à droite** (`#btn-menu-tactile`), affiché une fois le jeu démarré et seulement sur un appareil
-sans souris ; à l'horizontale, il est décalé de 76 px vers la gauche pour laisser la place à la gâchette R.
-La manette virtuelle d'EmulatorJS est **agrandie de 20 %** (section 5). Les menus se resserrent sur écran
-étroit (deux colonnes de cartes plutôt qu'une seule étirée) ou bas (menu en jeu sur deux colonnes, six
-emplacements sur une ligne), et le pied de page des raccourcis clavier y est masqué.
-
-**Raccourcis clavier d'origine** : **F2** sauvegarde rapide, **F4** chargement rapide, **Échap** menu,
-**P** pause — tous remappables, et sans équivalent manette tant que rien n'a été affecté.
-
-**Mappage** (menu de la console, ou en jeu partie en pause) : tableau de 550 px à gauche, illustration de la
-manette à droite, quatre onglets de joueur, deux colonnes clavier et manette, et en bas deux raccourcis —
-sauvegarde et chargement rapides, mappables y compris sur une gâchette. Un menu déroulant affecte un
-**périphérique précis à chaque joueur** (ou le désactive), un témoin s'allume quand ce périphérique envoie
-quelque chose, et le bouton **Enregistrer** valide l'ensemble. **Saisie enchaînée** : une fois une case
-affectée, la case suivante de la même colonne se met à l'écoute, jusqu'au bas du tableau (raccourcis
-compris) ; **Suppr** vide la case et passe à la suivante, **Échap** ou un clic ailleurs arrête. Côté manette,
-la case suivante n'écoute qu'une fois boutons relâchés et sticks revenus au repos. Tout est propre à chaque
-console : touches, périphériques, raccourcis, cœur choisi, volume (0,5 au départ) et options. Un bouton remet
-la console dans son état d'origine en supprimant son `config/<console>.json`.
-
-**Manettes** : détectées **à la demande** seulement, par le bouton `⟳ manettes` de la barre ou de la page de
-mappage. Tant qu'aucune manette n'est connue, aucune scrutation n'a lieu ; branchement et débranchement
-restent pris en compte, ce sont des événements.
+- **Accueil** : une vignette par console. **Bibliothèque** : *Mes jeux* (avec sauvegarde, vignette du dernier
+  état), puis *Autres jeux* ; recherche en tapant ; sélecteur de cœur par console ; « Manettes et touches ».
+- **Emplacements** : six par jeu ; libre = partie neuve ; suppression **avec confirmation** (« Annuler » a le
+  focus) ; écrasement par sauvegarde sans confirmation.
+- **Plein écran** demandé au lancement, sur la page entière ; refusé par le navigateur sans geste de
+  l'utilisateur (lancement **à la manette**, relance après changement de cœur) : le jeu démarre alors en fenêtre.
+- **En jeu** : menu (pause) par **Échap**, raccourci manette, **300 px de souris** ou clic ; boutons Reprendre,
+  Sauvegarder, Charger, lissage (shader SABR), Codes de triche, Manettes et touches, Quitter (confirmation), et
+  hors plein écran **Reprendre en plein écran** (sélectionné d'office). Sortie du plein écran par le navigateur
+  = menu. Clic dans le vide = reprise. Pointeur masqué après 3 s.
+- **Codes de triche** : par jeu, interrupteur et suppression (confirmation) par code ; **conservés sur le serveur
+  avec leur état** et réappliqués au lancement. Majuscules ; codes d'un même effet séparés par `+`. Formats :
+  Game Genie ou `0079:05` (NES), Game Genie ou Pro Action Replay (SNES, Mega Drive), Game Genie ou GameShark (GB),
+  GameShark (N64) ; arcade peu fiable. Code incompris : **ignoré sans message**.
+- **Tactile** : menu par le bouton à trois barres (`#btn-menu-tactile`, appareil sans souris, décalé de 76 px à
+  l'horizontale pour la gâchette R) ; manette virtuelle **agrandie de 20 %** ; menus resserrés sur petit écran.
+- **Raccourcis** : **F2** sauvegarde rapide, **F4** chargement rapide, **Échap** menu, **P** pause (remappables).
+- **Mappage** (par console) : quatre joueurs, colonnes clavier et manette, raccourcis de sauvegarde et chargement
+  rapides ; **un périphérique précis par joueur** (témoin d'activité) ; **Enregistrer** valide. **Saisie
+  enchaînée** de case en case (manette : après relâchement et retour au repos) ; **Suppr** vide, **Échap** arrête.
+  Tout est propre à la console (touches, périphériques, raccourcis, cœur, volume 0,5, options) ; « origine »
+  supprime `config/<console>.json`.
+- **Manettes** détectées **à la demande** (bouton `⟳ manettes`) ; aucune scrutation tant qu'aucune n'est connue.
 
 ---
 
 ## 4. Sauvegardes
 
-`saves/<console>/<id jeu>/` contient `slot<n>.state`, sa vignette `slot<n>.png`, `slot<n>.json` (cœur
-utilisé et date), `codes.json` (codes de triche : nom, code, actif) et `jeu.txt` (console, chemin relatif et
-nom lisible de la ROM). L'identifiant du jeu est un
-condensé **SHA-1 du chemin relatif, tronqué à 16 caractères** : renommer ou déplacer une ROM détache donc ses
-sauvegardes et ses codes. Un jeu qui n'a que des codes, sans état, ne figure pas dans *Mes jeux*.
+`saves/<console>/<id jeu>/` : `slot<n>.state`, `slot<n>.png`, `slot<n>.json` (cœur, date), `codes.json`, `jeu.txt`
+(console, chemin et nom de la ROM). Identifiant = **SHA-1 du chemin relatif, 16 caractères** : renommer ou déplacer
+une ROM **détache** ses sauvegardes et ses codes.
 
-⚠️ **Un état n'est relisible que par le cœur qui l'a écrit.** Au **lancement** d'un jeu, choisir un
-emplacement enregistré avec un autre cœur bascule sur ce cœur pour cette partie, sans modifier le réglage de
-la console. **En cours de partie**, le même emplacement est refusé : le cœur est compilé une fois par
-chargement de page. Le cœur annoncé est validé contre la liste de la console, au serveur comme au navigateur.
+⚠️ **Un état n'est relisible que par le cœur qui l'a écrit.** Au lancement, un emplacement d'un autre cœur bascule
+sur ce cœur pour la partie ; en cours de partie, il est refusé (cœur compilé une fois par chargement).
 
-**Restauration** : l'état est téléchargé pendant le chargement du cœur, puis appliqué **deux fois** — le cœur
-écrase l'état en fin d'initialisation — derrière un voile noir avec le son coupé, levé 150 ms après la
-seconde application. Filet de sécurité : le voile se lève dans tous les cas au bout de 4 s.
+**Restauration** : état téléchargé pendant le chargement du cœur, appliqué **deux fois** (le cœur l'écrase en fin
+d'initialisation), derrière un voile noir son coupé, levé 150 ms après (4 s au plus dans tous les cas).
 
-Garde-fous du serveur : un état est refusé au-delà de **96 Mo**, une vignette au-delà de **4 Mo**, un fichier
-de réglages au-delà de **512 ko**, une liste de codes au-delà de **100 codes** ou **64 ko** (nom limité à 120
-caractères, code à 1000, caractères de contrôle remplacés par `+`) ; l'identifiant doit être 16 caractères hexadécimaux et le numéro
-d'emplacement compris entre 1 et `EMU_SLOTS` (un `slot9.state` resté d'un réglage plus large est ignoré). Le
-cœur choisi pour une console doit figurer dans sa liste (section 1) : refusé à l'enregistrement, écarté à la
-lecture s'il a été écrit à la main. Un fichier JSON abîmé dans `config/` ou `saves/` est remplacé par les
-valeurs d'origine et signalé dans le journal du service (`journalctl -u emulateurs-web`).
-
-Les sauvegardes « pile » internes aux jeux (SRAM) restent dans le navigateur, pas sur le serveur.
+Garde-fous du serveur : état ≤ **96 Mo**, vignette ≤ **4 Mo**, réglages ≤ **512 ko**, codes ≤ **100** et **64 ko**
+(nom 120, code 1000 caractères) ; identifiant 16 hexadécimaux, emplacement 1 à `EMU_SLOTS` ; cœur validé contre la
+liste de la console ; JSON abîmé remplacé par les valeurs d'origine et signalé (`journalctl -u emulateurs-web`).
+Les sauvegardes internes (SRAM) restent dans le navigateur.
 
 ---
 
 ## 5. Pièges d'EmulatorJS — à lire avant toute modification
 
-Rien de ce qui suit n'est documenté en amont ; chacun de ces points a coûté une séance de mise au point.
+Rien de ceci n'est documenté en amont.
 
-- ⚠️ **Les URL de ROM et de BIOS se terminent par le vrai nom de fichier** (`…/mslug.zip`) : les cœurs arcade
-  identifient le jeu par ce nom, et EmulatorJS écrit le fichier sous le dernier segment de l'URL.
-- ⚠️ **HEAD doit être autorisé** sur les routes de fichiers — `api_route(methods=["GET","HEAD"])`, FastAPI ne
-  l'ajoute pas — sinon le chargement s'arrête à « Download Game Data », sans message.
-- ⚠️ **BIOS arcade** : `EJS_dontExtractBIOS = true` et URL réduite à `neogeo.zip` (route racine de `app.py`),
-  sinon EmulatorJS décompresse l'archive et FBNeo la croit incomplète en listant des fichiers pourtant
-  présents. `neogeo.zip` doit être la **version FBNeo à 38 fichiers**, à côté des jeux, sets modernes
-  (`201-p1.p1`…) ; les sets MAME 0.78 ne conviennent qu'aux cœurs `mame2003*`.
-- **Manettes** : EmulatorJS n'en lit aucune ici (`value2` vidé dans `EJS_defaultControls`). Un pont de
-  `player.js` transmet les entrées par `gameManager.simulateInput`, avec **calibrage de la position de repos
-  des axes** — indispensable avec des périphériques HID (pédales, joysticks) dont les axes ne reposent pas à
-  zéro, et qui provoquaient une direction maintenue en permanence. L'ordre dans lequel le navigateur voit les
-  périphériques n'a rien à voir avec les joueurs : d'où le choix explicite par joueur.
-- **Les contrôles ne doivent pas être réécrits après le démarrage** : `EJS_defaultControls` est appliqué
-  avant, puis `setupKeys()` convertit les noms de touches en codes. Les réinjecter dans `EJS_ready` remet des
-  chaînes et le clavier ne répond plus.
-- **Clavier** : EmulatorJS l'écoute **sur son cadre de jeu**. Dès qu'un bouton du menu prend le focus, le jeu
-  ne reçoit plus rien, d'où un relais dans `player.js` et la restitution du focus à la fermeture.
-- **Fenêtres d'EmulatorJS** : tant que l'une est ouverte, il ignore **toutes** les entrées (`isPopupOpen`).
-  Elles sont donc refermées de force en reprenant la partie.
-- **Boutons de la barre** : les clés sont `play` et `pause` (pas `playPause`) ; `contextMenu` est protégé et
-  ne peut pas être masqué par configuration ; la pause réaffiche `play` en forçant son style. Ces deux-là
-  sont donc neutralisés par une classe CSS portant `!important`.
-- **Plein écran** : EmulatorJS le demande sur son seul cadre, ce qui laisserait la surimpression hors écran ;
-  sa méthode `toggleFullscreen` est remplacée par la nôtre, qui bascule **la page entière**
-  (`document.documentElement`). ⚠️ Pas `#scene` : seuls l'élément en plein écran et ses descendants sont
-  affichés, et les fenêtres de second niveau (`#confirmation`, `#dialogue`, `#mappage`, `#triche`) ainsi que
-  `#messages` sont voisines de `#scene` — elles restaient invisibles (confirmation de sortie, mappage). Ne pas
-  tenter de sortir puis redemander le plein écran : le navigateur refuse sans geste de l'utilisateur, et un
-  appui de manette n'en est pas un. L'API Keyboard Lock, qui permettrait de garder Échap, exige HTTPS :
-  indisponible sur `http://nas:8097`.
-- **Bouton à trois barres d'EmulatorJS** (`menu-bar-button`) : il ouvre **sa** barre d'outils, que notre CSS
-  garde invisible hors de la surimpression ; et en mode `hidden`, il est seulement rendu transparent, donc
-  toujours cliquable en haut à droite. Il est retiré par CSS (`.ejs_virtualGamepad_open`) et remplacé par
-  `#btn-menu-tactile`, qui ouvre la surimpression.
-- **Manette virtuelle** : agrandie par `transform: scale(1.2)` depuis le coin extérieur de chaque bloc,
-  **sauf la croix directionnelle**. EmulatorJS calcule la direction avec `getBoundingClientRect()` (taille
-  transformée) moins `clientWidth / 2` (taille d'origine) : agrandie par transform, son centre serait décalé
-  de 12 px et un appui au milieu enverrait bas-droite. Son bloc est donc agrandi par la taille
-  (125 → 150 px, repéré par `:has(.ejs_dpad_main)`), et les boutons rangés avec elle (L de la Super NES)
-  un par un. Le stick N64 (nipplejs) supporte le transform.
-- **L'objet d'EmulatorJS change de forme d'une version à l'autre** : la 4.2.3 porte tout sur l'objet
-  principal, les versions récentes déplacent l'interface dans `.frontend`. `player.js` accepte les deux.
-- **Codes de triche** : le bouton `cheat` d'EmulatorJS reste masqué, tout passe par `gameManager.resetCheat()`
-  et `gameManager.setCheat(index, 1, code)`. ⚠️ Le cœur **ne sait pas désactiver un code** : fceumm ignore
-  l'argument `enabled` de `retro_cheat_set`. Chaque changement vide donc toute la liste du cœur puis y remet
-  les seuls codes actifs, avec des index consécutifs, comme RetroArch. Un code Game Genie cesse d'agir aussitôt ;
-  un code « RAM » laisse en mémoire la dernière valeur écrite, jusqu'à ce que le jeu la modifie. Au démarrage,
-  EmulatorJS vide lui-même la liste (`updateCheatUI`) juste avant `EJS_onGameStart` : les codes sont appliqués
-  dans ce dernier, jamais avant.
-- La traduction `fr-FR` **n'existe pas** sur le CDN : ne pas définir `EJS_language`.
+- ⚠️ **URL de ROM et de BIOS terminées par le vrai nom de fichier** (`…/mslug.zip`) : les cœurs arcade
+  identifient le jeu par ce nom.
+- ⚠️ **HEAD autorisé** sur les routes de fichiers (`api_route(methods=["GET","HEAD"])`) : sinon blocage sur
+  « Download Game Data », sans message.
+- ⚠️ **BIOS arcade** : `EJS_dontExtractBIOS = true` et URL réduite à `neogeo.zip` (route racine) ; sinon FBNeo croit
+  l'archive incomplète. `neogeo.zip` = **version FBNeo à 38 fichiers**, sets modernes (`201-p1.p1`…) ; les sets MAME
+  0.78 ne vont qu'aux cœurs `mame2003*`.
+- **Manettes** : EmulatorJS n'en lit aucune (`value2` vidé dans `EJS_defaultControls`) ; `player.js` les relaie par
+  `gameManager.simulateInput`, avec **calibrage du repos des axes** (périphériques HID dont les axes ne reposent pas
+  à zéro). L'ordre des périphériques n'a rien à voir avec les joueurs, d'où le choix par joueur.
+- **Contrôles jamais réécrits après le démarrage** : `setupKeys()` convertit les noms en codes ; les réinjecter dans
+  `EJS_ready` remet des chaînes et le clavier ne répond plus.
+- **Clavier** écouté sur le cadre de jeu : relais dans `player.js` quand un bouton du menu a le focus, focus rendu
+  à la fermeture.
+- **Fenêtres d'EmulatorJS** : tant qu'une est ouverte, toutes les entrées sont ignorées (`isPopupOpen`) : refermées
+  de force à la reprise.
+- **Barre** : clés `play` et `pause` (pas `playPause`) ; `contextMenu` non masquable et `play` réaffiché à la
+  pause : neutralisés par une classe CSS `!important`.
+- **Plein écran** : `toggleFullscreen` remplacé pour basculer **la page entière** (`document.documentElement`). ⚠️ Pas
+  `#scene` : `#confirmation`, `#dialogue`, `#mappage`, `#triche` et `#messages` en sont voisins et resteraient
+  invisibles. Ne pas sortir puis redemander le plein écran (refusé sans geste ; un appui de manette n'en est pas un).
+  Keyboard Lock exige HTTPS : indisponible.
+- **Bouton à trois barres d'EmulatorJS** (`menu-bar-button`) : invisible mais cliquable en mode `hidden` ; retiré par
+  CSS (`.ejs_virtualGamepad_open`) et remplacé par `#btn-menu-tactile`.
+- **Manette virtuelle** : `transform: scale(1.2)` depuis le coin extérieur de chaque bloc, **sauf la croix** : sa
+  direction est calculée avec `getBoundingClientRect()` moins `clientWidth / 2`, un transform décalerait le centre de
+  12 px. Son bloc est agrandi par la taille (125 → 150 px, `:has(.ejs_dpad_main)`), ses voisins (L de la SNES) un
+  par un. Le stick N64 (nipplejs) supporte le transform.
+- **Forme de l'objet EmulatorJS** : la 4.2.3 porte tout sur l'objet principal, les récentes dans `.frontend` ;
+  `player.js` accepte les deux.
+- **Codes de triche** : bouton `cheat` masqué ; `gameManager.resetCheat()` puis `setCheat(index, 1, code)`. ⚠️ Le
+  cœur **ne sait pas désactiver un code** (fceumm ignore `enabled`) : chaque changement vide la liste et remet les
+  seuls actifs, index consécutifs. Un code « RAM » laisse sa dernière valeur. EmulatorJS vide la liste juste avant
+  `EJS_onGameStart` : les codes sont appliqués là, jamais avant.
+- `fr-FR` **n'existe pas** sur le CDN : ne pas définir `EJS_language`.
 
 ---
 
@@ -233,28 +158,20 @@ Rien de ce qui suit n'est documenté en amont ; chacun de ces points a coûté u
 `WorkingDirectory=…/emulateurs/web`, `EnvironmentFile=-…/emulateurs/.env`, `RequiresMountsFor=/srv/data`,
 `ExecStart=/home/pc/miniconda3/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8097`,
 `Restart=on-failure`, `RestartSec=10`, `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=full`.
-Dépendances : FastAPI et uvicorn, dans Miniconda `base` (les mêmes que traitement_medias).
+FastAPI et uvicorn de Miniconda `base`. Tailscale seulement (UFW), sans mot de passe ; tuile sans `siteMonitor`.
 
-Service de l'hôte, donc UFW s'applique : joignable **par Tailscale seulement**, rien à ajouter au pare-feu,
-et pas de mot de passe (tailnet privé). Tuile Homepage **sans `siteMonitor`**.
-
-**`config/reglages.json`**, facultatif et jamais écrit par le site, surcharge deux réglages communs à toutes
-les consoles :
+**`config/reglages.json`** (facultatif, jamais écrit par le site) :
 ```json
 {
   "emulatorjs": "https://cdn.emulatorjs.org/stable/data/",
   "manette": { "modificateur": 8, "sauver": 4, "charger": 5, "menu": 9 }
 }
 ```
-— la source d'EmulatorJS (`/static/emulatorjs/data/` pour une copie locale, si le CDN venait à manquer ; vide =
-CDN) et la
-combinaison manette de repli (Select + L1 / R1 / Start) employée tant qu'aucun bouton n'a été affecté aux
-raccourcis d'une console.
+Source d'EmulatorJS (`/static/emulatorjs/data/` pour une copie locale ; vide = CDN) et combinaison manette de repli
+(Select + L1 / R1 / Start) tant qu'aucun raccourci n'est affecté.
 
-Modifier le code : copie datée (`cp -p … .bak-AAAA-MM-JJ`), `diff`, `py_compile` pour le Python,
-`sha256sum` comparé à l'empreinte donnée. Les fichiers statiques sont versionnés par `?v=<date>` — un simple
-rafraîchissement suffit ; seul un changement d'`app.py` demande `sudo systemctl restart emulateurs-web`.
-L'inventaire des ROM se rafraîchit seul (cache de 45 s) : déposer un jeu par Samba suffit.
+Modifier : copie datée, `diff`, `py_compile`, `sha256sum`. Statiques versionnés (`?v=<date>`) : un rafraîchissement
+suffit ; seul `app.py` demande `sudo systemctl restart emulateurs-web`. Un jeu déposé par Samba apparaît en 45 s.
 
 ---
 
@@ -262,35 +179,31 @@ L'inventaire des ROM se rafraîchit seul (cache de 45 s) : déposer un jeu par S
 
 ```bash
 systemctl is-active emulateurs-web; curl -s http://localhost:8097/sante; echo      # active / ok
-cd /srv/data/server/emulateurs/web && /home/pc/miniconda3/bin/python app.py --info # dossiers et nb de jeux
-curl -s -I http://localhost:8097/neogeo.zip | head -3            # 200 + content-length (BIOS arcade)
+cd /srv/data/server/emulateurs/web && /home/pc/miniconda3/bin/python app.py --info # dossiers, jeux, dossiers non reconnus
+curl -s -I http://localhost:8097/neogeo.zip | head -3            # 200 + content-length
 ls -l /srv/data/server/emulateurs/saves/*/*/slot*.state          # tailles plausibles (13 Ko NES, 823 Ko SNES)
 ```
-
-`--info` signale aussi les sous-dossiers d'`Emulateurs` qu'aucune console n'a reconnus, avec la manière de les
-associer.
-
-Dans la console du navigateur, jeu lancé :
+Console du navigateur, jeu lancé :
 ```js
 await import('/static/js/diag.js?x=' + Date.now())
-DIAG.aide()        // état, manettes vues, espion des entrées, test d'appui, focus
+DIAG.aide()        // état, manettes, espion des entrées, test d'appui, focus
 ```
 
 | Symptôme | Cause |
 |---|---|
 | Bloqué sur « Download Game Data » | HEAD refusé sur `/api/rom/…` |
-| FBNeo : « romset is missing files » alors que l'archive est complète | BIOS décompressé, ou set non FBNeo |
-| Manette reconnue au mappage, muette en jeu | mauvais périphérique affecté au joueur |
+| FBNeo : « romset is missing files » | BIOS décompressé, ou set non FBNeo |
+| Manette muette en jeu, reconnue au mappage | mauvais périphérique affecté au joueur |
 | Direction maintenue sans rien toucher | axe au repos non nul d'un autre périphérique : l'affecter ou désactiver le joueur |
-| Clavier mort après ouverture du menu | focus resté sur le menu |
-| Jeu lancé en fenêtre et non en plein écran | lancé à la manette ou relancé automatiquement : bouton « Reprendre en plein écran » du menu, à la souris ou au clavier |
-| Une fenêtre du menu (confirmation, mappage) n'apparaît pas en plein écran | plein écran demandé sur un autre élément que la page entière (section 5) |
-| Croix virtuelle qui part en diagonale au centre | bloc de la croix agrandi par `transform` (section 5) |
-| Code de triche activé sans effet | format non reconnu par le cœur, ou code écrit pour une autre version du jeu (USA / Europe) |
-| Page modifiée mais inchangée | URL statiques versionnées ; sinon Ctrl+Maj+R |
-| Un jeu déposé n'apparaît pas | extension hors du tableau de la section 1, ou moins de 45 s (cache) |
-| Les sauvegardes d'un jeu ont « disparu » | ROM renommée ou déplacée : l'identifiant vient du chemin |
-| Console absente de l'accueil | dossier non reconnu : `app.py --info`, puis `.env` ou `config/dossiers.json` |
+| Clavier mort après le menu | focus resté sur le menu |
+| Jeu en fenêtre | lancé à la manette ou relancé : « Reprendre en plein écran » à la souris ou au clavier |
+| Fenêtre du menu invisible en plein écran | plein écran demandé ailleurs que sur la page entière |
+| Croix virtuelle en diagonale au centre | bloc de la croix agrandi par `transform` |
+| Code de triche sans effet | format non reconnu, ou code d'une autre version du jeu |
+| Page inchangée après modification | Ctrl+Maj+R |
+| Jeu déposé absent | extension hors tableau, ou cache de 45 s |
+| Sauvegardes « disparues » | ROM renommée ou déplacée |
+| Console absente de l'accueil | `app.py --info`, puis `.env` ou `config/dossiers.json` |
 
 ---
 
@@ -298,37 +211,29 @@ DIAG.aide()        // état, manettes vues, espion des entrées, test d'appui, f
 
 | Méthode | Route | Rôle |
 |---|---|---|
-| `GET` | `/`, et toute URL inconnue hors `/api` et `/static` | la page unique |
+| `GET` | `/`, et toute URL inconnue hors `/api` et `/static` | la page |
 | `GET` | `/sante` | `ok` |
 | `GET` | `/api/consoles` · `/api/consoles/{cid}/jeux` · `/api/jeux/{cid}/{jid}` | inventaire |
-| `GET`/`HEAD` | `/api/rom/{cid}/{jid}[/{nom}]` | la ROM, servie sous son vrai nom |
+| `GET`/`HEAD` | `/api/rom/{cid}/{jid}[/{nom}]` | la ROM, sous son vrai nom |
 | `GET`/`HEAD` | `/{nom}` | fichier système à la racine (`neogeo.zip`), déclarée en dernier |
-| `GET`/`HEAD` · `PUT` · `DELETE` | `/api/etat/{cid}/{jid}/{slot}` | état d'un emplacement (`?core=` à l'écriture) |
-| `GET`/`HEAD` · `PUT` | `/api/image/{cid}/{jid}/{slot}` | vignette PNG (mise en cache 7 jours ; les états, jamais) |
-| `GET` · `PUT` | `/api/codes/{cid}/{jid}` | codes de triche d'un jeu ; `PUT` remplace toute la liste (vide = supprime `codes.json`) |
-| `GET` · `PUT` · `DELETE` | `/api/config/{cid}` | réglages d'une console ; `DELETE` = retour à l'origine |
-| `GET` | `/api/reglages` | réglages communs (lecture seule, voir section 6) |
+| `GET`/`HEAD` · `PUT` · `DELETE` | `/api/etat/{cid}/{jid}/{slot}` | état (`?core=` à l'écriture) |
+| `GET`/`HEAD` · `PUT` | `/api/image/{cid}/{jid}/{slot}` | vignette (cache 7 jours ; états jamais) |
+| `GET` · `PUT` | `/api/codes/{cid}/{jid}` | codes ; `PUT` remplace la liste (vide = supprime `codes.json`) |
+| `GET` · `PUT` · `DELETE` | `/api/config/{cid}` | réglages d'une console ; `DELETE` = origine |
+| `GET` | `/api/reglages` | réglages communs (lecture seule) |
 
 ---
 
-## 9. Dépôt Git
+## 9. Dépôt git
 
-**`git@github.com:claupierr/nas-emulateurs.git`**, dépôt **privé**, branche `main`, premier envoi le
-05/10/2026. Le dépôt vit dans le dossier du projet : `.git` est donc dans le miroir du mardi, ce qui fait une
-seconde copie de l'historique, indépendante de GitHub.
-
-`.gitignore` exclut `.env`, `saves/`, `config/`, `emu-*` (copies de livraison), `*.bak-*`, `__pycache__/`,
-`web/static/emulatorjs/`, `notes.txt` et toute ROM ou BIOS ; `*.md` sert à écarter les ROM Mega Drive, d'où
-les exceptions `!README.md` et `!EMULATEURS.md`.
-
+Privé, branche `main`, dans le dossier du projet (`.git` dans le miroir). `.gitignore` : `.env`, `saves/`,
+`config/`, `emu-*` (copies de livraison), `*.bak-*`, `__pycache__/`, `web/static/emulatorjs/`, `notes.txt`, ROM et
+BIOS ; `*.md` écarte les ROM Mega Drive, d'où les exceptions `!README.md` et `!EMULATEURS.md`.
 ```bash
 cd /srv/data/server/emulateurs
-git status --short      # À RELIRE : rien sous saves/, config/, .env, ni de copie oubliée
+git status --short      # À RELIRE : rien sous saves/, config/, .env, ni copie oubliée
 git add -A && git commit -m "…" && git push
 ```
-Contrôle des exclusions en cas de doute : `git check-ignore -v .env config/nes.json saves/…/slot1.state`
-nomme pour chaque chemin la règle qui l'écarte ; un chemin sans réponse serait versionné.
-
-Le passage en public se fait dans Settings → General → Danger Zone. Deux préalables : **tout l'historique
-devient visible**, pas seulement l'état actuel ; et sans fichier `LICENSE`, un dépôt public reste « tous
-droits réservés ». Prévoir aussi une note d'installation, ce fichier étant écrit pour cette machine.
+En cas de doute : `git check-ignore -v .env config/nes.json saves/…/slot1.state` (un chemin sans réponse serait
+versionné). Passage en public possible (Settings → General → Danger Zone) : **tout l'historique** devient visible,
+prévoir une `LICENSE` et une note d'installation.
