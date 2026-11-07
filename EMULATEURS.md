@@ -156,7 +156,7 @@ Rien de ceci n'est documenté en amont.
 
 `/etc/systemd/system/emulateurs-web.service` : `User/Group=pc`, `UMask=0002`, `Nice=10`, E/S `best-effort` 6,
 `WorkingDirectory=…/emulateurs/web`, `EnvironmentFile=-…/emulateurs/.env`, `RequiresMountsFor=/srv/data`,
-`ExecStart=/home/pc/miniconda3/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8097`,
+`ExecStart=/opt/miniconda3/bin/python -m uvicorn app:app --host 0.0.0.0 --port 8097`,
 `Restart=on-failure`, `RestartSec=10`, `NoNewPrivileges=yes`, `PrivateTmp=yes`, `ProtectSystem=full`.
 FastAPI et uvicorn de Miniconda `base`. Tailscale seulement (UFW), sans mot de passe ; tuile sans `siteMonitor`.
 
@@ -187,7 +187,7 @@ suffit ; seul `app.py` demande `sudo systemctl restart emulateurs-web`. Un jeu d
 
 ```bash
 systemctl is-active emulateurs-web; curl -s http://localhost:8097/sante; echo      # active / ok
-cd /srv/data/server/emulateurs/web && /home/pc/miniconda3/bin/python app.py --info # dossiers, jeux, dossiers non reconnus
+cd /srv/data/server/emulateurs/web && /opt/miniconda3/bin/python app.py --info # dossiers, jeux, dossiers non reconnus
 curl -s -I http://localhost:8097/neogeo.zip | head -3            # 200 + content-length
 ls -l /srv/data/server/emulateurs/saves/*/*/slot*.state          # tailles plausibles (13 Ko NES, 823 Ko SNES)
 ```
