@@ -10,7 +10,7 @@
 
 Six consoles rétro jouées dans le navigateur, ROM rangées dans `/srv/data/Documents/Emulateurs/`. Page
 **`http://nas:8097`**, tuile Homepage « Consoles ». Émulation par **EmulatorJS 4.2.3** (CDN
-`https://cdn.emulatorjs.org/stable/data/`), **entièrement dans le navigateur** : le serveur inventorie les ROM,
+`https://cdn.emulatorjs.org/4.2.3/data/`), **entièrement dans le navigateur** : le serveur inventorie les ROM,
 sert les fichiers, garde sauvegardes et réglages. ROM ouvertes **en lecture seule**, rien n'est écrit dans
 `Documents/`.
 
@@ -163,12 +163,20 @@ FastAPI et uvicorn de Miniconda `base`. Tailscale seulement (UFW), sans mot de p
 **`config/reglages.json`** (facultatif, jamais écrit par le site) :
 ```json
 {
-  "emulatorjs": "https://cdn.emulatorjs.org/stable/data/",
+  "emulatorjs": "https://cdn.emulatorjs.org/4.2.3/data/",
   "manette": { "modificateur": 8, "sauver": 4, "charger": 5, "menu": 9 }
 }
 ```
 Source d'EmulatorJS (`/static/emulatorjs/data/` pour une copie locale ; vide = CDN) et combinaison manette de repli
 (Select + L1 / R1 / Start) tant qu'aucun raccourci n'est affecté.
+
+**Version d'EmulatorJS épinglée** (`4.2.3`, dans `CDN_DEFAUT` de `app.py` et dans `reglages.json` s'il la
+définit) : `stable/` change sans prévenir, et les sauvegardes d'état dépendent de la version des cœurs. Changer de
+version : lire les notes (GitHub `EmulatorJS/EmulatorJS` → Releases ; suivi par Watch → Custom → Releases),
+vérifier l'adresse (`curl -s -o /dev/null -w '%{http_code}\n' https://cdn.emulatorjs.org/<V>/data/loader.js`
+→ `200`), remplacer le numéro aux deux endroits, `py_compile`, `sudo systemctl restart emulateurs-web`, puis
+lancer un jeu et charger une sauvegarde d'état. Une ancienne sauvegarde d'état peut ne plus se charger avec de
+nouveaux cœurs : faire une sauvegarde en jeu avant de changer.
 
 Modifier : copie datée, `diff`, `py_compile`, `sha256sum`. Statiques versionnés (`?v=<date>`) : un rafraîchissement
 suffit ; seul `app.py` demande `sudo systemctl restart emulateurs-web`. Un jeu déposé par Samba apparaît en 45 s.

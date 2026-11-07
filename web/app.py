@@ -46,7 +46,7 @@ MAX_CODES = 100                    # codes de triche par jeu
 MAX_CODES_OCTETS = 64 * 1024
 MAX_CONFIG = 512 * 1024            # réglages d'une console
 DUREE_CACHE = 45                   # s : inventaire relu seul après un dépôt par Samba
-CDN_DEFAUT = "https://cdn.emulatorjs.org/stable/data/"
+CDN_DEFAUT = "https://cdn.emulatorjs.org/4.2.3/data/"   # version épinglée : EMULATEURS.md, section 6
 
 RE_ID = re.compile(r"^[0-9a-f]{16}$")
 RE_FICHIER_SLOT = re.compile(r"^slot(\d+)\.(state|png)$")
